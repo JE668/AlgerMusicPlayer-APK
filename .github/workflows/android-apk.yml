@@ -71,8 +71,42 @@ jobs:
       - name: Build Android APK
         run: cd android && ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Find APK path
+        id: apk
+        run: |
+          APK=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)
+          echo "path=$APK" >> $GITHUB_OUTPUT
+          echo "APK: $APK"
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: AlgerMusicPlayer-APK
           path: android/app/build/outputs/apk/debug/*.apk
+
+      - name: Create/Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v5.2.0-apk
+          name: v5.2.0-apk (自动构建)
+          body: |
+            ## 🔧 自动构建 APK
+
+            基于 commit: ${{ github.sha }}
+
+            ### 修复内容
+            - 切回 Vercel Enhanced API (标准443端口，Android WebView 兼容)
+            - 修复 `withCredentials` + `Access-Control-Allow-Origin: *` CORS 冲突
+            - APK 内歌单刷新和歌曲播放恢复正常
+
+            ### 安装方式
+            1. 下载 APK
+            2. Android 设置 → 安全 → 允许安装未知来源应用
+            3. 安装即可
+
+            > ⚠️ 这是 debug 版本，如需 release 签名版本请提 issue
+          files: ${{ steps.apk.outputs.path }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          generate_release_notes: false
