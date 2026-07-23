@@ -47,7 +47,6 @@ jobs:
 
       - name: Init Capacitor Android
         run: |
-          # 移除 .gz 文件，避免 Android 资源合并冲突
           find out/renderer -name '*.gz' -delete
           npx cap add android
 
@@ -58,7 +57,6 @@ jobs:
 
       - name: Fix Android cleartext traffic for HTTP audio
         run: |
-          # 在 AndroidManifest 中添加 usesCleartextTraffic 允许 HTTP 音频
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           if grep -q "android:usesCleartextTraffic" "$MANIFEST"; then
             echo "cleartext already set"
@@ -66,23 +64,93 @@ jobs:
             sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$MANIFEST"
             echo "✅ added cleartext traffic"
           fi
-          cat "$MANIFEST" | head -15
 
-      - name: Build Android APK
+      - name: Generate app icons from source
+        run: |
+          # 使用项目中的 app-icon-1024.png 生成各密度 icon
+          ICON_SRC="resources/app-icon-1024.png"
+          RES_DIR="android/app/src/main/res"
+          mkdir -p ${RES_DIR}/mipmap-mdpi ${RES_DIR}/mipmap-hdpi ${RES_DIR}/mipmap-xhdpi ${RES_DIR}/mipmap-xxhdpi ${RES_DIR}/mipmap-xxxhdpi
+          
+          convert "$ICON_SRC" -resize 48x48   ${RES_DIR}/mipmap-mdpi/ic_launcher.png
+          convert "$ICON_SRC" -resize 48x48   ${RES_DIR}/mipmap-mdpi/ic_launcher_round.png
+          convert "$ICON_SRC" -resize 72x72   ${RES_DIR}/mipmap-hdpi/ic_launcher.png
+          convert "$ICON_SRC" -resize 72x72   ${RES_DIR}/mipmap-hdpi/ic_launcher_round.png
+          convert "$ICON_SRC" -resize 96x96   ${RES_DIR}/mipmap-xhdpi/ic_launcher.png
+          convert "$ICON_SRC" -resize 96x96   ${RES_DIR}/mipmap-xhdpi/ic_launcher_round.png
+          convert "$ICON_SRC" -resize 144x144  ${RES_DIR}/mipmap-xxhdpi/ic_launcher.png
+          convert "$ICON_SRC" -resize 144x144  ${RES_DIR}/mipmap-xxhdpi/ic_launcher_round.png
+          convert "$ICON_SRC" -resize 192x192  ${RES_DIR}/mipmap-xxxhdpi/ic_launcher.png
+          convert "$ICON_SRC" -resize 192x192  ${RES_DIR}/mipmap-xxxhdpi/ic_launcher_round.png
+          echo "✅ app icons generated from app-icon-1024.png"
+
+      - name: Build Debug APK
         run: cd android && ./gradlew assembleDebug
 
-      - name: Find APK path
+      - name: Restore keystore from secret
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+            echo "has_keystore=true" >> $GITHUB_ENV
+          else
+            echo "has_keystore=false" >> $GITHUB_ENV
+          fi
+
+      - name: Inject signing config into build.gradle
+        if: env.has_keystore == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
+        run: |
+          cat >> android/app/build.gradle << 'SIGNING_EOF'
+          
+          // === Injected by CI for release signing ===
+          android.signingConfigs {
+              release {
+                  storeFile file('release.keystore')
+                  storePassword System.getenv("KEYSTORE_PASSWORD")
+                  keyAlias System.getenv("KEYSTORE_ALIAS")
+                  keyPassword System.getenv("KEYSTORE_PASSWORD")
+              }
+          }
+          android.buildTypes.release.signingConfig = android.signingConfigs.release
+          SIGNING_EOF
+          echo "✅ signing config injected"
+          echo "=== build.gradle (last 15 lines) ==="
+          tail -15 android/app/build.gradle
+
+      - name: Build Release APK (signed)
+        if: env.has_keystore == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
+        run: |
+          cd android && ./gradlew assembleRelease
+
+      - name: Find APK paths
         id: apk
         run: |
-          APK=$(find android/app/build/outputs/apk/debug -name '*.apk' | head -1)
-          echo "path=$APK" >> $GITHUB_OUTPUT
-          echo "APK: $APK"
+          DEBUG_APK=$(find android/app/build/outputs/apk/debug -name '*.apk' 2>/dev/null | head -1)
+          RELEASE_APK=$(find android/app/build/outputs/apk/release -name '*.apk' 2>/dev/null | head -1)
+          echo "debug=$DEBUG_APK" >> $GITHUB_OUTPUT
+          echo "release=$RELEASE_APK" >> $GITHUB_OUTPUT
+          echo "DEBUG: $DEBUG_APK"
+          echo "RELEASE: $RELEASE_APK"
 
-      - name: Upload APK artifact
+      - name: Upload Debug APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AlgerMusicPlayer-APK
+          name: AlgerMusicPlayer-Debug
           path: android/app/build/outputs/apk/debug/*.apk
+
+      - name: Upload Release APK artifact
+        if: env.has_keystore == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlgerMusicPlayer-Release
+          path: android/app/build/outputs/apk/release/*.apk
 
       - name: Create/Update Release
         uses: softprops/action-gh-release@v2
@@ -90,7 +158,7 @@ jobs:
           tag_name: v5.2.0-apk
           name: v5.2.0-apk (自动构建)
           body: |
-            ## 🔧 自动构建 APK
+            ## 🔧 APK 自动构建
 
             基于 commit: ${{ github.sha }}
 
@@ -98,15 +166,21 @@ jobs:
             - 切回 Vercel Enhanced API (标准443端口，Android WebView 兼容)
             - 修复 `withCredentials` + `Access-Control-Allow-Origin: *` CORS 冲突
             - APK 内歌单刷新和歌曲播放恢复正常
+            - ✨ 新增自定义 app 图标
+            - 🔐 Release APK 已签名
 
             ### 安装方式
-            1. 下载 APK
+            1. 下载 APK（Debug 版兼容性最好，Release 版已签名）
             2. Android 设置 → 安全 → 允许安装未知来源应用
             3. 安装即可
-
-            > ⚠️ 这是 debug 版本，如需 release 签名版本请提 issue
-          files: ${{ steps.apk.outputs.path }}
+          files: |
+            ${{ steps.apk.outputs.debug }}
+            ${{ steps.apk.outputs.release }}
           draft: false
           prerelease: false
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
           generate_release_notes: false
+
+      - name: Cleanup keystore
+        if: ${{ always() }}
+        run: rm -f android/app/release.keystore android/keystore.properties
