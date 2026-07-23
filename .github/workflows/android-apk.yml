@@ -60,27 +60,40 @@ jobs:
 
       - name: Setup Native AudioPlugin
         run: |
-          # 复制原生 AudioFocus 插件
+          # 复制原生 AudioFocus 插件到 Android 项目
           mkdir -p android/app/src/main/java/com/alger/audio
           cp native/android/capacitor-audio/src/main/java/com/alger/audio/*.java android/app/src/main/java/com/alger/audio/
           
           # 注入 androidx.media 依赖（MediaSession 需要）
           BUILD_GRADLE="android/app/build.gradle"
-          if ! grep -q "androidx.media:media" "$BUILD_GRADLE"; then
-            sed -i "/dependencies {/a\\    implementation 'androidx.media:media:1.6.0'" "$BUILD_GRADLE"
-          fi
+          python3 -c "
+import re, sys
+with open('$BUILD_GRADLE', 'r') as f:
+    content = f.read()
+if 'androidx.media:media' not in content:
+    content = re.sub(r'(dependencies \{)','\\1\\n    implementation \"androidx.media:media:1.6.0\"', content)
+    with open('$BUILD_GRADLE', 'w') as f:
+        f.write(content)
+    print('media dep injected')
+"
           
-          # 在 AndroidManifest 注册原生 AudioFocus 插件
+          # 在 AndroidManifest 注册 MediaButtonReceiver（方向盘/蓝牙接收器）
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if ! grep -q "androidx.media.session.MediaButtonReceiver" "$MANIFEST"; then
-            # 添加媒体按键接收器（方向盘/蓝牙控制）
-            sed -i '/<\/application>/i\
-        <receiver android:name="androidx.media.session.MediaButtonReceiver" android:exported="true">\
-            <intent-filter>\
-                <action android:name="android.intent.action.MEDIA_BUTTON" />\
-            <\/intent-filter>\
-        <\/receiver>' "$MANIFEST"
-          fi
+          python3 -c "
+with open('$MANIFEST', 'r') as f:
+    content = f.read()
+if 'MediaButtonReceiver' not in content:
+    receiver = '''        <receiver android:name=\"androidx.media.session.MediaButtonReceiver\" android:exported=\"true\">
+            <intent-filter>
+                <action android:name=\"android.intent.action.MEDIA_BUTTON\" />
+            <\/intent-filter>
+        <\/receiver>
+'''
+    content = content.replace('</application>', receiver + '    </application>')
+    with open('$MANIFEST', 'w') as f:
+        f.write(content)
+    print('MediaButtonReceiver registered')
+"
           echo "✅ Native AudioPlugin configured"
 
       - name: Fix Android cleartext traffic for HTTP audio
