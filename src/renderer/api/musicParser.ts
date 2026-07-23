@@ -513,9 +513,25 @@ export class MusicParser {
     const startTime = performance.now();
 
     try {
-      // 非Electron环境不支持本地解析
+      // 非Electron环境 - 尝试直接从 API 获取（绕过策略解析）
       if (!isElectron) {
-        console.log('非Electron环境，不支持音乐解析');
+        console.log('非Electron环境，尝试直接通过 API 获取音乐 URL');
+        try {
+          const { getMusicUrl } = await import('@/api/music');
+          const apiResult = await getMusicUrl(id);
+          if (apiResult?.data?.data?.[0]?.url) {
+            const url = apiResult.data.data[0].url;
+            return {
+              data: {
+                code: 200,
+                message: 'success',
+                data: { url }
+              }
+            };
+          }
+        } catch (e) {
+          console.warn('非Electron环境直接获取URL失败:', e);
+        }
         return buildFailedResult('当前环境不支持音乐解析');
       }
 
