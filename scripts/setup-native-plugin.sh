@@ -13,8 +13,9 @@ if ! grep -q 'androidx.media:media' "$BG"; then
   echo "media dep injected"
 fi
 
-# 3. 注入 WAKE_LOCK + POST_NOTIFICATIONS 权限
 MF=android/app/src/main/AndroidManifest.xml
+
+# 3. 注入 WAKE_LOCK + POST_NOTIFICATIONS 权限
 if ! grep -q 'WAKE_LOCK' "$MF"; then
   sed -i '/<manifest/a\
   <uses-permission android:name="android.permission.WAKE_LOCK" />\
@@ -33,31 +34,10 @@ if ! grep -q MediaButtonReceiver "$MF"; then
   echo "MediaButtonReceiver registered"
 fi
 
-# 5. 暗色主题：修改 manifest theme + 追加 styles 文件
-#    替换 Capacitor 默认的 SplashScreen 主题为自定义暗色主题
-if grep -q 'AppTheme.NoActionBarLaunch' "$MF"; then
-  sed -i 's|@style/AppTheme.NoActionBarLaunch|@style/AppTheme|' "$MF"
-  echo "AppTheme replaced in manifest"
-fi
+# 5. 暗色状态栏 (用 Python 解析 XML，不 blind-sed)
+python3 native/android/capacitor-audio/scripts/inject_theme.py
 
-#    创建独立的 themes.xml（不覆盖 Capacitor 的 styles.xml）
-THEMES="android/app/src/main/res/values/themes.xml"
-if [ ! -f "$THEMES" ]; then
-  cat > "$THEMES" << 'THEMEXML'
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="android:statusBarColor">@android:color/black</item>
-        <item name="android:navigationBarColor">@android:color/black</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowBackground">@android:color/black</item>
-    </style>
-</resources>
-THEMEXML
-  echo "themes.xml created with dark AppTheme"
-fi
-
-# 6. 启用 WebView 硬件加速（默认 true，显式声明确保）
+# 6. WebView 硬件加速
 if ! grep -q 'hardwareAccelerated' "$MF"; then
   sed -i 's|<application|<application android:hardwareAccelerated="true"|' "$MF"
   echo "Hardware acceleration enabled"
