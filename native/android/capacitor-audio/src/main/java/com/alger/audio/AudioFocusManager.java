@@ -386,25 +386,6 @@ public class AudioFocusManager {
         }
     }
 
-    private void updateNotificationPaused() {
-        // Show notification in paused state (still visible, but not ongoing)
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(appContext, CHANNEL_ID)
-            .setContentTitle(currentTitle.isEmpty() ? "AlgerMusicPlayer" : currentTitle)
-            .setContentText(currentArtist.isEmpty() ? "Paused" : currentArtist + " (Paused)")
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setOngoing(false)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
-                .setMediaSession(mediaSession.getSessionToken())
-                .setShowActionsInCompactView(0, 1, 2))
-            .addAction(android.R.drawable.ic_media_previous, "Previous", null)
-            .addAction(android.R.drawable.ic_media_play, "Play", null)
-            .addAction(android.R.drawable.ic_media_next, "Next", null);
-
-        notificationManager.notify(NOTIFICATION_ID, builder.build());
-    }
-
     public boolean hasAudioFocus() { return hasAudioFocus; }
     public boolean isPlaying() { return isPlaying; }
 
