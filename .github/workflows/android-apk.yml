@@ -46,7 +46,15 @@ jobs:
         run: ls -la out/renderer/
 
       - name: Init Capacitor Android
-        run: npx cap add android
+        run: |
+          # 移除 .gz 文件，避免 Android 资源合并冲突
+          find out/renderer -name '*.gz' -delete
+          npx cap add android
+
+      - name: Sync Capacitor assets
+        run: |
+          find out/renderer -name '*.gz' -delete
+          npx cap sync android
 
       - name: Build Android APK
         run: cd android && ./gradlew assembleDebug
