@@ -1,6 +1,7 @@
 import type { AudioOutputDevice } from '@/types/audio';
 import type { SongResult } from '@/types/music';
 import { getImgUrl, isElectron } from '@/utils';
+import { AudioFocus } from '@/native/audioFocus';
 
 class AudioService {
   private audio: HTMLAudioElement;
@@ -55,6 +56,11 @@ class AudioService {
       this.initMediaSession();
     }
 
+    // 初始化原生 AudioFocus 插件（Android 车机/蓝牙/方向盘控制）
+    if (!isElectron) {
+      this.initNativeAudioFocus();
+    }
+
     // Restore EQ bypass state
     const bypassState = localStorage.getItem('eqBypass');
     this.bypass = bypassState ? JSON.parse(bypassState) : false;
@@ -68,11 +74,13 @@ class AudioService {
   private bindAudioEvents() {
     this.audio.addEventListener('play', () => {
       this.updateMediaSessionState(true);
+      this.updateNativePlaybackState(true);
       this.emit('play');
     });
 
     this.audio.addEventListener('pause', () => {
       this.updateMediaSessionState(false);
+      this.updateNativePlaybackState(false);
       this.emit('pause');
     });
 
@@ -142,6 +150,80 @@ class AudioService {
     });
   }
 
+  // ==================== Native AudioFocus (Android 车机/蓝牙/方向盘) ====================
+
+  private async initNativeAudioFocus() {
+    try {
+      // 监听原生媒体按钮事件（方向盘/蓝牙耳机）
+      AudioFocus.addListener('mediaButton', (data: { action: string }) => {
+        switch (data.action) {
+          case 'play':
+          case 'playpause':
+            if (this.audio.paused) {
+              this.audio.play();
+            } else {
+              this.audio.pause();
+            }
+            break;
+          case 'pause':
+            this.audio.pause();
+            break;
+          case 'next':
+            this.emit('nexttrack');
+            break;
+          case 'previous':
+            this.emit('previoustrack');
+            break;
+        }
+      });
+
+      // 监听焦点丢失（电话、其他 app 抢占音频）—— 暂停播放
+      AudioFocus.addListener('audioFocusLost', (data: { transient: boolean }) => {
+        console.log('AudioFocus lost, transient:', data.transient);
+        this.audio.pause();
+      });
+
+      // 监听焦点恢复
+      AudioFocus.addListener('audioFocusGained', () => {
+        console.log('AudioFocus regained');
+      });
+
+      // 注册原生 AudioFocus
+      await AudioFocus.requestFocus();
+      console.log('Native AudioFocus plugin initialized');
+    } catch (e) {
+      // 非 Capacitor 环境或无插件时静默失败
+      console.log('Native AudioFocus not available:', e);
+    }
+  }
+
+  private nativeUpdateMetadata(track: SongResult) {
+    if (isElectron) return;
+    try {
+      const artists = track.ar
+        ? track.ar.map((a) => a.name)
+        : track.song?.artists?.map((a: any) => a.name);
+      const album = track.al?.name || track.song?.album?.name || '';
+      AudioFocus.updateMetadata({
+        title: track.name || '',
+        artist: artists?.join(',') || '',
+        album: album,
+        coverUrl: getImgUrl(track.picUrl, '512y512')
+      });
+    } catch (e) { /* ignore */ }
+  }
+
+  private nativeUpdatePlaybackState(isPlaying: boolean) {
+    if (isElectron) return;
+    try {
+      AudioFocus.updatePlaybackState({
+        playing: isPlaying,
+        position: this.audio.currentTime || 0,
+        duration: this.audio.duration || 0
+      });
+    } catch (e) { /* ignore */ }
+  }
+
   private updateMediaSessionMetadata(track: SongResult) {
     try {
       if (!('mediaSession' in navigator)) return;
@@ -164,6 +246,9 @@ class AudioService {
         album: album || '',
         artwork
       });
+
+      // 同步到原生 MediaSession（车机显示）
+      this.nativeUpdateMetadata(track);
     } catch (error) {
       console.error('更新媒体会话元数据时出错:', error);
     }

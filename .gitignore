@@ -28,6 +28,7 @@ out
 
 resources/android/**/*
 android/app/release
+!native/android/**
 
 .cursor
 .windsurf

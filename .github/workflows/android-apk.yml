@@ -58,6 +58,31 @@ jobs:
           find out/renderer -name '*.gz' -delete
           npx cap sync android
 
+      - name: Setup Native AudioPlugin
+        run: |
+          # 复制原生 AudioFocus 插件
+          mkdir -p android/app/src/main/java/com/alger/audio
+          cp native/android/capacitor-audio/src/main/java/com/alger/audio/*.java android/app/src/main/java/com/alger/audio/
+          
+          # 注入 androidx.media 依赖（MediaSession 需要）
+          BUILD_GRADLE="android/app/build.gradle"
+          if ! grep -q "androidx.media:media" "$BUILD_GRADLE"; then
+            sed -i "/dependencies {/a\\    implementation 'androidx.media:media:1.6.0'" "$BUILD_GRADLE"
+          fi
+          
+          # 在 AndroidManifest 注册原生 AudioFocus 插件
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q "androidx.media.session.MediaButtonReceiver" "$MANIFEST"; then
+            # 添加媒体按键接收器（方向盘/蓝牙控制）
+            sed -i '/<\/application>/i\
+        <receiver android:name="androidx.media.session.MediaButtonReceiver" android:exported="true">\
+            <intent-filter>\
+                <action android:name="android.intent.action.MEDIA_BUTTON" />\
+            <\/intent-filter>\
+        <\/receiver>' "$MANIFEST"
+          fi
+          echo "✅ Native AudioPlugin configured"
+
       - name: Fix Android cleartext traffic for HTTP audio
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
@@ -165,22 +190,27 @@ jobs:
       - name: Create/Update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v5.2.0-apk
-          name: v5.2.0-apk (自动构建)
+          tag_name: v5.3.0-apk
+          name: v5.3.0-apk (自动构建)
           body: |
-            ## 🔧 APK 自动构建
+            ## 🚗 车机/蓝牙优化
 
             基于 commit: ${{ github.sha }}
 
-            ### 修复内容
+            ### 新增功能
+            - 🔈 **AudioFocus 管理** — 不再和其他播放器同时出声
+            - 🎛️ **方向盘/蓝牙控制** — 支持车机方向盘按钮切歌/暂停
+            - 📺 **车机信息显示** — 歌曲名、歌手、专辑名投送到车机屏幕
+            - 🎨 自定义 app 图标
+
+            ### 修复
             - 切回 Vercel Enhanced API (标准443端口，Android WebView 兼容)
             - 修复 `withCredentials` + `Access-Control-Allow-Origin: *` CORS 冲突
             - APK 内歌单刷新和歌曲播放恢复正常
-            - ✨ 新增自定义 app 图标
             - 🔐 Release APK 已签名
 
             ### 安装方式
-            1. 下载 APK（Debug 版兼容性最好，Release 版已签名）
+            1. 下载 APK
             2. Android 设置 → 安全 → 允许安装未知来源应用
             3. 安装即可
           files: |
