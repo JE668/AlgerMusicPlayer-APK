@@ -517,10 +517,12 @@ export class MusicParser {
       if (!isElectron) {
         console.log('非Electron环境，尝试直接通过 API 获取音乐 URL');
         try {
-          const { getMusicUrl } = await import('@/api/music');
-          const apiResult = await getMusicUrl(id);
-          if (apiResult?.data?.data?.[0]?.url) {
-            const url = apiResult.data.data[0].url;
+          const { default: apiRequest } = await import('@/utils/request');
+          const apiResult = await apiRequest.get('/song/url/v1', {
+            params: { id, level: 'higher', timestamp: Date.now() }
+          });
+          const url = apiResult?.data?.data?.[0]?.url;
+          if (url) {
             return {
               data: {
                 code: 200,
