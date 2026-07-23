@@ -14,7 +14,7 @@ interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
 
 const baseURL = window.electron
   ? `http://127.0.0.1:${setData?.musicApiPort}`
-  : import.meta.env.VITE_API || 'https://amusic.170909.xyz:1799/api';
+  : import.meta.env.VITE_API || 'https://unblock.170909.xyz';
 
 const request = axios.create({
   baseURL,
@@ -33,7 +33,7 @@ request.interceptors.request.use(
     setData = getSetData();
     config.baseURL = window.electron
       ? `http://127.0.0.1:${setData?.musicApiPort}`
-      : import.meta.env.VITE_API || 'https://amusic.170909.xyz:1799/api';
+      : import.meta.env.VITE_API || 'https://unblock.170909.xyz';
     // 只在retryCount未定义时初始化为0
     if (config.retryCount === undefined) {
       config.retryCount = 0;

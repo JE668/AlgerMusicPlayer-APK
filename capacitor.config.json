@@ -7,11 +7,12 @@
     "allowNavigation": [
       "*.music.126.net",
       "*.music.163.com",
-      "amusic.170909.xyz:1799",
+      "unblock.170909.xyz",
       "*.170909.xyz"
     ]
   },
   "android": {
-    "backgroundColor": "#000000"
+    "backgroundColor": "#000000",
+    "allowMixedContent": true
   }
 }
