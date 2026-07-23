@@ -1,0 +1,60 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [dev]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+        env:
+          npm_config_ignore_scripts: true
+
+      - name: Build web app
+        run: npx electron-vite build
+        env:
+          VITE_API: https://unblock.170909.xyz
+
+      - name: Verify web build output
+        run: ls -la out/renderer/
+
+      - name: Init Capacitor
+        run: |
+          npx cap init AlgerMusicPlayer com.alger.music --web-dir out/renderer
+          npx cap add android
+
+      - name: Build Android APK
+        run: cd android && ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlgerMusicPlayer-APK
+          path: android/app/build/outputs/apk/debug/*.apk

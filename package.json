@@ -1,7 +1,7 @@
 {
   "name": "AlgerMusicPlayer",
-  "version": "5.1.0",
-  "description": "Alger Music Player",
+  "version": "5.1.0-apk",
+  "description": "Alger Music Player - APK 版 (API: unblock.170909.xyz)",
   "author": "Alger <algerkc@qq.com>",
   "main": "./out/main/index.js",
   "homepage": "https://github.com/algerkong/AlgerMusicPlayer",
@@ -24,7 +24,9 @@
     "build:mac": "npm run build && electron-builder --mac --x64 --publish never && cp dist/latest-mac.yml dist/latest-mac-x64.yml && electron-builder --mac --arm64 --publish never && cp dist/latest-mac.yml dist/latest-mac-arm64.yml && node scripts/merge_latest_mac_yml.mjs dist/latest-mac-x64.yml dist/latest-mac-arm64.yml dist/latest-mac.yml",
     "build:mac:x64": "npm run build && electron-builder --mac --x64 --publish never && cp dist/latest-mac.yml dist/latest-mac-x64.yml",
     "build:mac:arm64": "npm run build && electron-builder --mac --arm64 --publish never && cp dist/latest-mac.yml dist/latest-mac-arm64.yml",
-    "build:linux": "npm run build && electron-builder --linux --publish never"
+    "build:linux": "npm run build && electron-builder --linux --publish never",
+    "build:web": "electron-vite build",
+    "build:android": "npm run build:web && npx cap sync android && cd android && ./gradlew assembleDebug"
   },
   "lint-staged": {
     "*.{ts,tsx,vue,js}": [
@@ -61,6 +63,9 @@
     "vue-i18n": "^11.2.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/android": "^8.4.2",
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
     "@electron-toolkit/eslint-config": "^2.1.0",
