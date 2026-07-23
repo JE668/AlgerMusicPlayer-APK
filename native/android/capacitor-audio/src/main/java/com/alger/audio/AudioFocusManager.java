@@ -1,5 +1,9 @@
 package com.alger.audio;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioAttributes;
@@ -8,19 +12,32 @@ import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.view.KeyEvent;
 
+import androidx.core.app.NotificationCompat;
+
 public class AudioFocusManager {
+
+    private static final String CHANNEL_ID = "alger_playback";
+    private static final int NOTIFICATION_ID = 1001;
 
     private AudioManager audioManager;
     private MediaSessionCompat mediaSession;
     private AudioFocusRequest focusRequest;
+    private PowerManager.WakeLock wakeLock;
     private boolean hasAudioFocus = false;
     private boolean isPlaying = false;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private Context appContext;
+    private NotificationManager notificationManager;
+
+    private String currentTitle = "";
+    private String currentArtist = "";
+    private String currentAlbum = "";
 
     private AudioFocusCallback focusCallback;
 
@@ -32,16 +49,35 @@ public class AudioFocusManager {
 
     public AudioFocusManager(Context context) {
         audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        this.appContext = context.getApplicationContext();
+        this.notificationManager = (NotificationManager)
+            appContext.getSystemService(Context.NOTIFICATION_SERVICE);
     }
 
     public void init(Context context, AudioFocusCallback callback) {
         this.focusCallback = callback;
+
+        // Create notification channel (Android 8+)
+        createNotificationChannel();
+
+        // Build PendingIntent to open app
+        Intent launchIntent = context.getPackageManager()
+            .getLaunchIntentForPackage(context.getPackageName());
+        PendingIntent pendingIntent = null;
+        if (launchIntent != null) {
+            pendingIntent = PendingIntent.getActivity(
+                context, 0, launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ?
+                    PendingIntent.FLAG_IMMUTABLE : 0)
+            );
+        }
 
         mediaSession = new MediaSessionCompat(context, "AlgerMusicPlayer");
         mediaSession.setFlags(
                 MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS |
                 MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
         );
+        mediaSession.setMediaButtonReceiver(pendingIntent);
         mediaSession.setCallback(new MediaSessionCompat.Callback() {
             @Override
             public boolean onMediaButtonEvent(Intent mediaButtonIntent) {
@@ -106,6 +142,133 @@ public class AudioFocusManager {
         mediaSession.setActive(true);
     }
 
+    // ==================== Notification Channel ====================
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+
+        NotificationChannel channel = notificationManager.getNotificationChannel(CHANNEL_ID);
+        if (channel == null) {
+            channel = new NotificationChannel(
+                CHANNEL_ID,
+                "Music Playback",
+                NotificationManager.IMPORTANCE_LOW
+            );
+            channel.setDescription("Playback controls for AlgerMusicPlayer");
+            channel.setShowBadge(false);
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            channel.enableVibration(false);
+            channel.setSound(null, null);
+            notificationManager.createNotificationChannel(channel);
+        }
+    }
+
+    // ==================== WakeLock ====================
+
+    private void acquireWakeLock() {
+        if (wakeLock != null && wakeLock.isHeld()) return;
+
+        PowerManager pm = (PowerManager) appContext.getSystemService(Context.POWER_SERVICE);
+        if (pm == null) return;
+
+        wakeLock = pm.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "AlgerMusicPlayer::Playback"
+        );
+        wakeLock.setReferenceCounted(false);
+        // 不设超时 — 只要在播放就一直持有
+        wakeLock.acquire();
+    }
+
+    private void releaseWakeLock() {
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+        }
+    }
+
+    // ==================== Notification ====================
+
+    private PendingIntent buildMediaButtonIntent(int keyCode) {
+        Intent intent = new Intent(Intent.ACTION_MEDIA_BUTTON);
+        intent.setPackage(appContext.getPackageName());
+        intent.putExtra(Intent.EXTRA_KEY_EVENT, new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
+        return PendingIntent.getBroadcast(
+            appContext, keyCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ?
+                PendingIntent.FLAG_IMMUTABLE : 0)
+        );
+    }
+
+    private void buildAndShowNotification() {
+        if (mediaSession == null) return;
+
+        Intent launchIntent = appContext.getPackageManager()
+            .getLaunchIntentForPackage(appContext.getPackageName());
+        PendingIntent contentIntent = null;
+        if (launchIntent != null) {
+            contentIntent = PendingIntent.getActivity(
+                appContext, 0, launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ?
+                    PendingIntent.FLAG_IMMUTABLE : 0)
+            );
+        }
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(appContext, CHANNEL_ID)
+            .setContentTitle(currentTitle.isEmpty() ? "AlgerMusicPlayer" : currentTitle)
+            .setContentText(currentArtist.isEmpty() ? "Now playing" : currentArtist)
+            .setSubText(currentAlbum.isEmpty() ? null : currentAlbum)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentIntent(contentIntent)
+            .setOngoing(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                .setMediaSession(mediaSession.getSessionToken())
+                .setShowActionsInCompactView(0, 1, 2))
+            .addAction(android.R.drawable.ic_media_previous, "Previous",
+                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+            .addAction(android.R.drawable.ic_media_pause, "Pause",
+                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_PAUSE))
+            .addAction(android.R.drawable.ic_media_next, "Next",
+                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_NEXT));
+
+        notificationManager.notify(NOTIFICATION_ID, builder.build());
+    }
+
+    private void updateNotificationPaused() {
+        if (currentTitle.isEmpty()) {
+            dismissNotification();
+            return;
+        }
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(appContext, CHANNEL_ID)
+            .setContentTitle(currentTitle)
+            .setContentText(currentArtist.isEmpty() ? "Paused" : currentArtist + " (Paused)")
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setOngoing(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                .setMediaSession(mediaSession.getSessionToken())
+                .setShowActionsInCompactView(0, 1, 2))
+            .addAction(android.R.drawable.ic_media_previous, "Previous",
+                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+            .addAction(android.R.drawable.ic_media_play, "Play",
+                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_PLAY))
+            .addAction(android.R.drawable.ic_media_next, "Next",
+                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_NEXT));
+
+        notificationManager.notify(NOTIFICATION_ID, builder.build());
+    }
+
+    private void dismissNotification() {
+        try {
+            notificationManager.cancel(NOTIFICATION_ID);
+        } catch (Exception ignored) {}
+    }
+
+    // ==================== AudioFocus ====================
+
     public void requestFocus() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             AudioAttributes attrs = new AudioAttributes.Builder()
@@ -164,17 +327,26 @@ public class AudioFocusManager {
         mainHandler.post(() -> handleFocusChange(focusChange));
     };
 
+    // ==================== Public API ====================
+
     public void updateMetadata(String title, String artist, String album, String coverUrl) {
+        this.currentTitle = title != null ? title : "";
+        this.currentArtist = artist != null ? artist : "";
+        this.currentAlbum = album != null ? album : "";
+
         if (mediaSession == null) return;
 
         MediaMetadataCompat.Builder builder = new MediaMetadataCompat.Builder()
-                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title != null ? title : "")
-                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist != null ? artist : "")
-                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album != null ? album : "");
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, this.currentTitle)
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, this.currentArtist)
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, this.currentAlbum);
         if (coverUrl != null && !coverUrl.isEmpty()) {
             builder.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, coverUrl);
         }
         mediaSession.setMetadata(builder.build());
+
+        // Update notification
+        buildAndShowNotification();
     }
 
     public void updatePlaybackState(boolean playing, long positionMs, long durationMs) {
@@ -198,12 +370,47 @@ public class AudioFocusManager {
                 );
 
         mediaSession.setPlaybackState(builder.build());
+
+        // WakeLock management
+        if (playing) {
+            acquireWakeLock();
+        } else {
+            releaseWakeLock();
+        }
+
+        // Notification
+        if (playing) {
+            buildAndShowNotification();
+        } else {
+            updateNotificationPaused();
+        }
+    }
+
+    private void updateNotificationPaused() {
+        // Show notification in paused state (still visible, but not ongoing)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(appContext, CHANNEL_ID)
+            .setContentTitle(currentTitle.isEmpty() ? "AlgerMusicPlayer" : currentTitle)
+            .setContentText(currentArtist.isEmpty() ? "Paused" : currentArtist + " (Paused)")
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setOngoing(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                .setMediaSession(mediaSession.getSessionToken())
+                .setShowActionsInCompactView(0, 1, 2))
+            .addAction(android.R.drawable.ic_media_previous, "Previous", null)
+            .addAction(android.R.drawable.ic_media_play, "Play", null)
+            .addAction(android.R.drawable.ic_media_next, "Next", null);
+
+        notificationManager.notify(NOTIFICATION_ID, builder.build());
     }
 
     public boolean hasAudioFocus() { return hasAudioFocus; }
     public boolean isPlaying() { return isPlaying; }
 
     public void release() {
+        releaseWakeLock();
+        dismissNotification();
         abandonFocus();
         if (mediaSession != null) {
             mediaSession.setActive(false);

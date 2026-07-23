@@ -25,4 +25,10 @@ if ! grep -q MediaButtonReceiver "$MF"; then
   echo "MediaButtonReceiver registered"
 fi
 
+# 注入 WAKE_LOCK + POST_NOTIFICATIONS 权限（锁屏保持播放 & 通知栏控制）
+if ! grep -q 'WAKE_LOCK' "$MF"; then
+  sed -i 's|^<manifest |<manifest \n  <uses-permission android:name="android.permission.WAKE_LOCK" />\n  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />|' "$MF"
+  echo "Permissions injected"
+fi
+
 echo "Native AudioPlugin setup complete"
