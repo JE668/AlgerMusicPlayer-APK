@@ -56,6 +56,18 @@ jobs:
           find out/renderer -name '*.gz' -delete
           npx cap sync android
 
+      - name: Fix Android cleartext traffic for HTTP audio
+        run: |
+          # 在 AndroidManifest 中添加 usesCleartextTraffic 允许 HTTP 音频
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if grep -q "android:usesCleartextTraffic" "$MANIFEST"; then
+            echo "cleartext already set"
+          else
+            sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$MANIFEST"
+            echo "✅ added cleartext traffic"
+          fi
+          cat "$MANIFEST" | head -15
+
       - name: Build Android APK
         run: cd android && ./gradlew assembleDebug
 
