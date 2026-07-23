@@ -12,7 +12,7 @@
         />
       </setting-item>
 
-      <setting-item v-if="isElectron" :title="t('settings.playback.musicSources')">
+      <setting-item :title="t('settings.playback.musicSources')">
         <template #description>
           <div class="flex items-center gap-2">
             <n-switch v-model:value="setData.enableMusicUnblock">
@@ -87,7 +87,6 @@
     </div>
 
     <music-source-settings
-      v-if="isElectron"
       v-model:show="showMusicSourcesModal"
       v-model:sources="musicSources"
     />
@@ -101,7 +100,6 @@ import { useI18n } from 'vue-i18n';
 import AudioDeviceSettings from '@/components/settings/AudioDeviceSettings.vue';
 import MusicSourceSettings from '@/components/settings/MusicSourceSettings.vue';
 import { type Platform } from '@/types/music';
-import { isElectron } from '@/utils';
 
 import { SETTINGS_DATA_KEY } from '../keys';
 import SBtn from '../SBtn.vue';

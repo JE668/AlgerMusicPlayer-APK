@@ -513,9 +513,10 @@ export class MusicParser {
     const startTime = performance.now();
 
     try {
-      // 非Electron环境 - 尝试直接从 API 获取（绕过策略解析）
+      // 尝试直接从 API 获取（所有环境可用，做为 fallback）
+      // API fallback 优先于策略解析
       if (!isElectron) {
-        console.log('非Electron环境，尝试直接通过 API 获取音乐 URL');
+        console.log('非Electron环境，优先尝试直接通过 API 获取音乐 URL');
         try {
           const { default: apiRequest } = await import('@/utils/request');
           const apiResult = await apiRequest.get('/song/url/v1', {
@@ -532,9 +533,9 @@ export class MusicParser {
             };
           }
         } catch (e) {
-          console.warn('非Electron环境直接获取URL失败:', e);
+          console.warn('非Electron环境直接获取URL失败，回退到策略解析:', e);
         }
-        return buildFailedResult('当前环境不支持音乐解析');
+        // 不要 return，继续走下面的策略解析！
       }
 
       // 获取设置存储

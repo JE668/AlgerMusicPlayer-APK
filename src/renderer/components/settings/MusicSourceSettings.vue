@@ -409,6 +409,10 @@ const toggleSource = (sourceKey: string) => {
  * 导入自定义API插件
  */
 const importPlugin = async () => {
+  if (!window.api?.importCustomApiPlugin) {
+    message.warning('本功能在移动端不可用，请使用桌面版导入');
+    return;
+  }
   try {
     const result = await window.api.importCustomApiPlugin();
     if (result && result.name && result.content) {
@@ -429,6 +433,10 @@ const importPlugin = async () => {
  * 导入落雪音源脚本
  */
 const importLxMusicScript = async () => {
+  if (!window.api?.importLxMusicScript) {
+    message.warning('本功能在移动端不可用，请使用桌面版导入');
+    return;
+  }
   try {
     const result = await window.api.importLxMusicScript();
     if (result && result.content) {
