@@ -89,6 +89,10 @@ jobs:
           convert "$ICON_SRC" -resize 192x192  ${RES_DIR}/mipmap-xxxhdpi/ic_launcher.png
           convert "$ICON_SRC" -resize 192x192  ${RES_DIR}/mipmap-xxxhdpi/ic_launcher_round.png
           echo "✅ app icons generated from app-icon-1024.png"
+          
+          # 删除 adaptive icon XML，否则 Android 8.0+ 不会用我们的 PNG 图标
+          rm -rf ${RES_DIR}/mipmap-anydpi-v26
+          echo "✅ removed adaptive icon (v26) to use bitmap icons"
 
       - name: Build Debug APK
         run: cd android && ./gradlew assembleDebug
