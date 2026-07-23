@@ -7,7 +7,7 @@
 
     <!-- 设置项列表容器 -->
     <div
-      class="bg-white dark:bg-neutral-900 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800 shadow-sm"
+      class="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm setting-section-body"
     >
       <slot></slot>
     </div>
@@ -42,3 +42,14 @@ const setRef = (el: Element | ComponentPublicInstance | null) => {
   emit('ref', el as Element | null);
 };
 </script>
+
+<style scoped>
+.setting-section-body > :deep(.setting-item:first-child) {
+  border-top-left-radius: 1rem;
+  border-top-right-radius: 1rem;
+}
+.setting-section-body > :deep(.setting-item:last-child) {
+  border-bottom-left-radius: 1rem;
+  border-bottom-right-radius: 1rem;
+}
+</style>
