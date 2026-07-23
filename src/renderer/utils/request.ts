@@ -19,7 +19,7 @@ const baseURL = window.electron
 const request = axios.create({
   baseURL,
   timeout: 15000,
-  withCredentials: true
+  withCredentials: !isElectron ? false : true
 });
 
 // 最大重试次数
