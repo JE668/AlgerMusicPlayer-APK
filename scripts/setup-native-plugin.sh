@@ -40,9 +40,24 @@ if ! grep -q MediaButtonReceiver "$MF"; then
 fi
 
 # 6. 注入暗色主题（沉浸式状态栏 + 启动黑底）
+#     Capacitor 默认用 AppTheme.NoActionBarLaunch，直接往里加暗色属性值
+MF=android/app/src/main/AndroidManifest.xml
+# 确保 manifest 引用主题（通常 Capacitor 已生成）
 if ! grep -q 'android:theme' "$MF"; then
   sed -i 's|<application|<application android:theme="@style/AppTheme"|' "$MF"
-  echo "AppTheme applied"
+fi
+
+# 在 Capacitor 的 styles.xml 追加暗色沉浸式属性
+SF=android/app/src/main/res/values/styles.xml
+if [ -f "$SF" ] && ! grep -q 'statusBarColor' "$SF"; then
+  sed -i '/<\/resources>/i\
+    <style name="AppTheme.NoActionBarLaunch" parent="AppTheme.NoActionBar">\
+        <item name="android:statusBarColor">@android:color/black<\/item>\
+        <item name="android:navigationBarColor">@android:color/black<\/item>\
+        <item name="android:windowLightStatusBar">false<\/item>\
+        <item name="android:windowBackground">@android:color/black<\/item>\
+    <\/style>' "$SF"
+  echo "Dark theme injected into styles.xml"
 fi
 
 # 7. 启用 WebView 硬件加速（默认 true，显式声明确保）
