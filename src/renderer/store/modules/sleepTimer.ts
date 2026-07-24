@@ -208,9 +208,6 @@ export const useSleepTimerStore = defineStore('sleepTimer', () => {
       if (sleepTimer.value.remainingSongs <= 0) {
         console.log('已播放完设定的歌曲数，停止播放');
         stopPlayback();
-        setTimeout(() => {
-          stopPlayback();
-        }, 1000);
       }
     }
 

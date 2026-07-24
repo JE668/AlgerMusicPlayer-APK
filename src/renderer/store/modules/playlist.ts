@@ -363,15 +363,28 @@ export const usePlaylistStore = defineStore(
       const playerCore = usePlayerCoreStore();
       const { playMusic } = storeToRefs(playerCore);
 
-      // 如果删除的是当前播放的歌曲，先切换到下一首
-      if (id === playMusic.value.id) {
-        nextPlay();
-      }
-
+      // 先移除歌曲，再处理索引，避免异步切歌与列表修改的竞态
       const newPlayList = [...playList.value];
       newPlayList.splice(index, 1);
+
+      // 如果删除的是当前播放的歌曲，需要在移除后切换到下一首
+      const isCurrentSong = id === playMusic.value.id;
+
+      // 先更新列表，让索引计算基于新列表
       // preserveOrder=true：随机模式下移除单曲不重新洗牌，仅从队列中删除
       setPlayList(newPlayList, false, false, true);
+
+      // 移除当前歌曲后，切换到下一首（基于已更新的列表）
+      if (isCurrentSong) {
+        const newIndex = Math.min(index, Math.max(0, newPlayList.length - 1));
+        if (newPlayList.length > 0) {
+          playListIndex.value = newIndex;
+          nextPlay();
+        } else {
+          // 列表已空，停止播放
+          clearPlayAll();
+        }
+      }
     };
 
     /**
@@ -636,6 +649,9 @@ export const usePlaylistStore = defineStore(
       try {
         const playerCore = usePlayerCoreStore();
 
+        // 用户手动切歌：取消失败跳歌定时器，防止覆盖新歌
+        cancelRetryTimer();
+
         // Check URL expiration
         if (song.expiredAt && song.expiredAt < Date.now()) {
           if (!song.playMusicUrl?.startsWith('local://')) {
@@ -702,6 +718,10 @@ export const usePlaylistStore = defineStore(
             // 立即预加载，不等待
             preloadNextSongs(playListIndex.value);
           }
+          // 手动切歌也触发定时器计数（歌曲数/列表结束），
+          // 与 _nextPlay 成功后调用 handleSongChange 保持一致
+          const sleepTimerStore = useSleepTimerStore();
+          sleepTimerStore.handleSongChange();
         }
         return success;
       } catch (error) {

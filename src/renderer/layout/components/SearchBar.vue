@@ -372,9 +372,7 @@ const selectSearchType = (key: number) => {
 const rawSearchTypes = ref(SEARCH_TYPES);
 const searchTypeOptions = computed(() => {
   locale.value;
-  return rawSearchTypes.value
-    .filter(() => isElectron)
-    .map((type) => ({ label: t(type.label), key: type.key }));
+  return rawSearchTypes.value.map((type) => ({ label: t(type.label), key: type.key }));
 });
 
 const suggestions = ref<string[]>([]);

@@ -76,7 +76,10 @@ const loadMetadata = async (
       if (music.backgroundColor && music.primaryColor) {
         return { backgroundColor: music.backgroundColor, primaryColor: music.primaryColor };
       }
-      return await getImageLinearBackground(getImgUrl(music?.picUrl, '30y30'));
+      if (!music?.picUrl) {
+        return { backgroundColor: '', primaryColor: '' };
+      }
+      return await getImageLinearBackground(getImgUrl(music.picUrl, '30y30'));
     })()
   ]);
 
