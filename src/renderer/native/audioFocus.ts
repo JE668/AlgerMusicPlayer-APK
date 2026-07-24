@@ -1,7 +1,8 @@
 import { registerPlugin } from '@capacitor/core';
 
 export interface AudioFocusPlugin {
-  requestFocus(): Promise<void>;
+  requestFocus(): Promise<{ granted: boolean }>;
+  requestFocusTransient(): Promise<{ granted: boolean }>;
   abandonFocus(): Promise<void>;
   updateMetadata(options: {
     title: string;
@@ -15,6 +16,7 @@ export interface AudioFocusPlugin {
     duration: number;
   }): Promise<void>;
   isActive(): Promise<{ hasFocus: boolean; isPlaying: boolean }>;
+  pause(): Promise<void>;
   addListener(
     eventName: 'audioFocusGained',
     listener: () => void

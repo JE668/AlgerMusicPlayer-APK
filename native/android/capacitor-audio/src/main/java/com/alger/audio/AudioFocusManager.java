@@ -4,12 +4,14 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -19,6 +21,7 @@ import android.support.v4.media.session.PlaybackStateCompat;
 import android.view.KeyEvent;
 
 import androidx.core.app.NotificationCompat;
+import androidx.media.session.MediaButtonReceiver;
 
 public class AudioFocusManager {
 
@@ -38,8 +41,12 @@ public class AudioFocusManager {
     private String currentTitle = "";
     private String currentArtist = "";
     private String currentAlbum = "";
+    private String currentCoverUrl = "";
+    private long currentDuration = 0;
+    private long currentPosition = 0;
 
     private AudioFocusCallback focusCallback;
+    private boolean sessionActive = false;
 
     public interface AudioFocusCallback {
         void onAudioFocusGained();
@@ -54,30 +61,35 @@ public class AudioFocusManager {
             appContext.getSystemService(Context.NOTIFICATION_SERVICE);
     }
 
-    public void init(Context context, AudioFocusCallback callback) {
+    public void setCallback(AudioFocusCallback callback) {
         this.focusCallback = callback;
+    }
 
-        // Create notification channel (Android 8+)
+    /**
+     * 延迟初始化 MediaSession — 只在真正需要播放时才激活，
+     * 避免与车载系统自带播放器的 MediaSession 竞争。
+     */
+    private void ensureSessionInitialized() {
+        if (mediaSession != null) return;
+
         createNotificationChannel();
 
-        // Build PendingIntent to open app
-        Intent launchIntent = context.getPackageManager()
-            .getLaunchIntentForPackage(context.getPackageName());
-        PendingIntent pendingIntent = null;
-        if (launchIntent != null) {
-            pendingIntent = PendingIntent.getActivity(
-                context, 0, launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ?
-                    PendingIntent.FLAG_IMMUTABLE : 0)
-            );
-        }
+        // MediaButtonReceiver PendingIntent — 正确指向 Manifest 中注册的 Receiver
+        Intent mediaButtonIntent = new Intent(Intent.ACTION_MEDIA_BUTTON);
+        mediaButtonIntent.setClass(appContext, MediaButtonReceiver.class);
+        PendingIntent buttonReceiverIntent = PendingIntent.getBroadcast(
+            appContext, 0, mediaButtonIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ?
+                PendingIntent.FLAG_IMMUTABLE : 0)
+        );
 
-        mediaSession = new MediaSessionCompat(context, "AlgerMusicPlayer");
+        mediaSession = new MediaSessionCompat(appContext, "AlgerMusicPlayer");
         mediaSession.setFlags(
                 MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS |
                 MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
         );
-        mediaSession.setMediaButtonReceiver(pendingIntent);
+        // 关键修复：指向 MediaButtonReceiver，不是 Activity
+        mediaSession.setMediaButtonReceiver(buttonReceiverIntent);
         mediaSession.setCallback(new MediaSessionCompat.Callback() {
             @Override
             public boolean onMediaButtonEvent(Intent mediaButtonIntent) {
@@ -85,61 +97,41 @@ public class AudioFocusManager {
                 if (event == null || event.getAction() != KeyEvent.ACTION_DOWN) return false;
 
                 int keyCode = event.getKeyCode();
-                int action = -1;
-                switch (keyCode) {
-                    case KeyEvent.KEYCODE_MEDIA_PLAY:           action = keyCode; break;
-                    case KeyEvent.KEYCODE_MEDIA_PAUSE:         action = keyCode; break;
-                    case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:    action = keyCode; break;
-                    case KeyEvent.KEYCODE_MEDIA_NEXT:          action = keyCode; break;
-                    case KeyEvent.KEYCODE_MEDIA_PREVIOUS:      action = keyCode; break;
-                }
-
-                if (action > 0) {
-                    final int finalAction = action;
-                    mainHandler.post(() -> {
-                        if (focusCallback != null) focusCallback.onMediaButton(finalAction);
-                    });
-                    return true;
-                }
-                return false;
+                dispatchMediaButton(keyCode);
+                return true;
             }
 
             @Override
             public void onPlay() {
-                mainHandler.post(() -> {
-                    if (focusCallback != null) focusCallback.onMediaButton(KeyEvent.KEYCODE_MEDIA_PLAY);
-                });
+                dispatchMediaButton(KeyEvent.KEYCODE_MEDIA_PLAY);
             }
 
             @Override
             public void onPause() {
-                mainHandler.post(() -> {
-                    if (focusCallback != null) focusCallback.onMediaButton(KeyEvent.KEYCODE_MEDIA_PAUSE);
-                });
+                dispatchMediaButton(KeyEvent.KEYCODE_MEDIA_PAUSE);
             }
 
             @Override
             public void onSkipToNext() {
-                mainHandler.post(() -> {
-                    if (focusCallback != null) focusCallback.onMediaButton(KeyEvent.KEYCODE_MEDIA_NEXT);
-                });
+                dispatchMediaButton(KeyEvent.KEYCODE_MEDIA_NEXT);
             }
 
             @Override
             public void onSkipToPrevious() {
-                mainHandler.post(() -> {
-                    if (focusCallback != null) focusCallback.onMediaButton(KeyEvent.KEYCODE_MEDIA_PREVIOUS);
-                });
+                dispatchMediaButton(KeyEvent.KEYCODE_MEDIA_PREVIOUS);
             }
 
             @Override
             public void onStop() {
-                mainHandler.post(() -> {
-                    if (focusCallback != null) focusCallback.onMediaButton(KeyEvent.KEYCODE_MEDIA_PAUSE);
-                });
+                dispatchMediaButton(KeyEvent.KEYCODE_MEDIA_PAUSE);
             }
         });
-        mediaSession.setActive(true);
+    }
+
+    private void dispatchMediaButton(int keyCode) {
+        mainHandler.post(() -> {
+            if (focusCallback != null) focusCallback.onMediaButton(keyCode);
+        });
     }
 
     // ==================== Notification Channel ====================
@@ -176,7 +168,6 @@ public class AudioFocusManager {
             "AlgerMusicPlayer::Playback"
         );
         wakeLock.setReferenceCounted(false);
-        // 不设超时 — 只要在播放就一直持有
         wakeLock.acquire();
     }
 
@@ -188,10 +179,11 @@ public class AudioFocusManager {
 
     // ==================== Notification ====================
 
-    private PendingIntent buildMediaButtonIntent(int keyCode) {
+    private PendingIntent buildMediaButtonPendingIntent(int keyCode) {
         Intent intent = new Intent(Intent.ACTION_MEDIA_BUTTON);
-        intent.setPackage(appContext.getPackageName());
-        intent.putExtra(Intent.EXTRA_KEY_EVENT, new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
+        intent.setClass(appContext, MediaButtonReceiver.class);
+        intent.putExtra(Intent.EXTRA_KEY_EVENT,
+            new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
         return PendingIntent.getBroadcast(
             appContext, keyCode, intent,
             PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ?
@@ -199,9 +191,7 @@ public class AudioFocusManager {
         );
     }
 
-    private void buildAndShowNotification() {
-        if (mediaSession == null) return;
-
+    private Notification buildNotification(boolean playing) {
         Intent launchIntent = appContext.getPackageManager()
             .getLaunchIntentForPackage(appContext.getPackageName());
         PendingIntent contentIntent = null;
@@ -213,52 +203,40 @@ public class AudioFocusManager {
             );
         }
 
+        String title = currentTitle.isEmpty() ? "AlgerMusicPlayer" : currentTitle;
+        String text = currentArtist.isEmpty()
+            ? (playing ? "Now playing" : "Paused")
+            : (playing ? currentArtist : currentArtist + " ⏸");
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(appContext, CHANNEL_ID)
-            .setContentTitle(currentTitle.isEmpty() ? "AlgerMusicPlayer" : currentTitle)
-            .setContentText(currentArtist.isEmpty() ? "Now playing" : currentArtist)
+            .setContentTitle(title)
+            .setContentText(text)
             .setSubText(currentAlbum.isEmpty() ? null : currentAlbum)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(contentIntent)
-            .setOngoing(true)
+            .setOngoing(playing)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
                 .setMediaSession(mediaSession.getSessionToken())
                 .setShowActionsInCompactView(0, 1, 2))
             .addAction(android.R.drawable.ic_media_previous, "Previous",
-                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_PREVIOUS))
-            .addAction(android.R.drawable.ic_media_pause, "Pause",
-                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_PAUSE))
+                buildMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+            .addAction(playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
+                playing ? "Pause" : "Play",
+                buildMediaButtonPendingIntent(playing ? KeyEvent.KEYCODE_MEDIA_PAUSE : KeyEvent.KEYCODE_MEDIA_PLAY))
             .addAction(android.R.drawable.ic_media_next, "Next",
-                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_NEXT));
+                buildMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_NEXT));
 
-        notificationManager.notify(NOTIFICATION_ID, builder.build());
+        return builder.build();
     }
 
-    private void updateNotificationPaused() {
-        if (currentTitle.isEmpty()) {
-            dismissNotification();
-            return;
+    private void showNotification() {
+        try {
+            notificationManager.notify(NOTIFICATION_ID, buildNotification(isPlaying));
+        } catch (SecurityException e) {
+            // POST_NOTIFICATIONS permission not granted on Android 13+
         }
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(appContext, CHANNEL_ID)
-            .setContentTitle(currentTitle)
-            .setContentText(currentArtist.isEmpty() ? "Paused" : currentArtist + " (Paused)")
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setOngoing(false)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
-                .setMediaSession(mediaSession.getSessionToken())
-                .setShowActionsInCompactView(0, 1, 2))
-            .addAction(android.R.drawable.ic_media_previous, "Previous",
-                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_PREVIOUS))
-            .addAction(android.R.drawable.ic_media_play, "Play",
-                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_PLAY))
-            .addAction(android.R.drawable.ic_media_next, "Next",
-                buildMediaButtonIntent(KeyEvent.KEYCODE_MEDIA_NEXT));
-
-        notificationManager.notify(NOTIFICATION_ID, builder.build());
     }
 
     private void dismissNotification() {
@@ -269,7 +247,14 @@ public class AudioFocusManager {
 
     // ==================== AudioFocus ====================
 
-    public void requestFocus() {
+    /**
+     * 请求音频焦点。返回 true 表示成功获得焦点。
+     */
+    public boolean requestFocus() {
+        ensureSessionInitialized();
+        if (mediaSession == null) return false;
+
+        int result;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             AudioAttributes attrs = new AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -284,16 +269,59 @@ public class AudioFocusManager {
                     })
                     .build();
 
-            int result = audioManager.requestAudioFocus(focusRequest);
-            hasAudioFocus = (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED);
+            result = audioManager.requestAudioFocus(focusRequest);
         } else {
-            int result = audioManager.requestAudioFocus(
+            result = audioManager.requestAudioFocus(
                     afChangeListener,
                     AudioManager.STREAM_MUSIC,
                     AudioManager.AUDIOFOCUS_GAIN
             );
+        }
+
+        hasAudioFocus = (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED);
+
+        if (hasAudioFocus) {
+            // 拿到焦点后才激活 MediaSession
+            if (!sessionActive && mediaSession != null) {
+                mediaSession.setActive(true);
+                sessionActive = true;
+            }
+        }
+
+        return hasAudioFocus;
+    }
+
+    /**
+     * 以瞬态模式重试获取焦点（专为车载抢焦点设计）
+     */
+    public boolean requestFocusTransient() {
+        ensureSessionInitialized();
+        if (mediaSession == null) return false;
+
+        AudioAttributes attrs = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(attrs)
+                    .setAcceptsDelayedFocusGain(false)
+                    .setOnAudioFocusChangeListener(focusChange -> {
+                        mainHandler.post(() -> handleFocusChange(focusChange));
+                    })
+                    .build();
+
+            int result = audioManager.requestAudioFocus(focusRequest);
             hasAudioFocus = (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED);
         }
+
+        if (hasAudioFocus && !sessionActive && mediaSession != null) {
+            mediaSession.setActive(true);
+            sessionActive = true;
+        }
+
+        return hasAudioFocus;
     }
 
     public void abandonFocus() {
@@ -302,6 +330,11 @@ public class AudioFocusManager {
             audioManager.abandonAudioFocusRequest(focusRequest);
         } else {
             audioManager.abandonAudioFocus(afChangeListener);
+        }
+        // 失去焦点时停用 MediaSession 避免竞争
+        if (sessionActive && mediaSession != null) {
+            mediaSession.setActive(false);
+            sessionActive = false;
         }
     }
 
@@ -313,11 +346,19 @@ public class AudioFocusManager {
                 break;
             case AudioManager.AUDIOFOCUS_LOSS:
                 hasAudioFocus = false;
+                if (sessionActive && mediaSession != null) {
+                    mediaSession.setActive(false);
+                    sessionActive = false;
+                }
                 if (focusCallback != null) focusCallback.onAudioFocusLost(false);
                 break;
             case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
-            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
                 hasAudioFocus = false;
+                if (focusCallback != null) focusCallback.onAudioFocusLost(true);
+                break;
+            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
+                // 短暂失去焦点但可以降低音量继续播放
+                hasAudioFocus = true; // 保持播放，只降低音量
                 if (focusCallback != null) focusCallback.onAudioFocusLost(true);
                 break;
         }
@@ -333,25 +374,39 @@ public class AudioFocusManager {
         this.currentTitle = title != null ? title : "";
         this.currentArtist = artist != null ? artist : "";
         this.currentAlbum = album != null ? album : "";
+        this.currentCoverUrl = coverUrl != null ? coverUrl : "";
 
         if (mediaSession == null) return;
 
         MediaMetadataCompat.Builder builder = new MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, this.currentTitle)
                 .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, this.currentArtist)
-                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, this.currentAlbum);
-        if (coverUrl != null && !coverUrl.isEmpty()) {
-            builder.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, coverUrl);
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, this.currentAlbum)
+                // 车载仪表盘显示字段
+                .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, this.currentTitle)
+                .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE,
+                    this.currentAlbum.isEmpty() ? this.currentArtist :
+                    this.currentArtist + " · " + this.currentAlbum)
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, this.currentDuration);
+
+        if (!this.currentCoverUrl.isEmpty()) {
+            builder.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, this.currentCoverUrl);
+            builder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, this.currentCoverUrl);
         }
+
         mediaSession.setMetadata(builder.build());
 
-        // Update notification
-        buildAndShowNotification();
+        // 更新通知栏
+        if (hasAudioFocus) {
+            showNotification();
+        }
     }
 
     public void updatePlaybackState(boolean playing, long positionMs, long durationMs) {
         if (mediaSession == null) return;
         isPlaying = playing;
+        this.currentPosition = positionMs;
+        this.currentDuration = durationMs;
 
         int state = playing
                 ? PlaybackStateCompat.STATE_PLAYING
@@ -371,18 +426,18 @@ public class AudioFocusManager {
 
         mediaSession.setPlaybackState(builder.build());
 
-        // WakeLock management
+        // WakeLock 管理
         if (playing) {
             acquireWakeLock();
         } else {
             releaseWakeLock();
         }
 
-        // Notification
-        if (playing) {
-            buildAndShowNotification();
-        } else {
-            updateNotificationPaused();
+        // 通知栏
+        if (hasAudioFocus) {
+            showNotification();
+        } else if (!playing) {
+            dismissNotification();
         }
     }
 
@@ -394,9 +449,21 @@ public class AudioFocusManager {
         dismissNotification();
         abandonFocus();
         if (mediaSession != null) {
-            mediaSession.setActive(false);
+            if (sessionActive) {
+                mediaSession.setActive(false);
+                sessionActive = false;
+            }
             mediaSession.release();
             mediaSession = null;
         }
+    }
+
+    /**
+     * 释放 AudioFocus 但保留 MediaSession（应用进入后台但音乐继续）
+     */
+    public void pause() {
+        releaseWakeLock();
+        abandonFocus();
+        dismissNotification();
     }
 }

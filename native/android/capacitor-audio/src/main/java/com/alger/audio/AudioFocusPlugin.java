@@ -16,10 +16,11 @@ public class AudioFocusPlugin extends Plugin {
     @Override
     public void load() {
         focusManager = new AudioFocusManager(getContext());
-        focusManager.init(getContext(), new AudioFocusManager.AudioFocusCallback() {
+        AudioFocusManager.AudioFocusCallback callback = new AudioFocusManager.AudioFocusCallback() {
             @Override
             public void onAudioFocusGained() {
-                notifyListeners("audioFocusGained", new JSObject());
+                JSObject data = new JSObject();
+                notifyListeners("audioFocusGained", data);
             }
 
             @Override
@@ -55,15 +56,33 @@ public class AudioFocusPlugin extends Plugin {
                 data.put("action", actionName);
                 notifyListeners("mediaButton", data);
             }
-        });
+        };
+        // 延迟初始化：注册回调但不在 load() 时初始化 MediaSession
+        focusManager.setCallback(callback);
     }
 
     @PluginMethod
     public void requestFocus(PluginCall call) {
+        JSObject result = new JSObject();
         if (focusManager != null) {
-            focusManager.requestFocus();
+            boolean granted = focusManager.requestFocus();
+            result.put("granted", granted);
+        } else {
+            result.put("granted", false);
         }
-        call.resolve();
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void requestFocusTransient(PluginCall call) {
+        JSObject result = new JSObject();
+        if (focusManager != null) {
+            boolean granted = focusManager.requestFocusTransient();
+            result.put("granted", granted);
+        } else {
+            result.put("granted", false);
+        }
+        call.resolve(result);
     }
 
     @PluginMethod
@@ -112,6 +131,14 @@ public class AudioFocusPlugin extends Plugin {
             result.put("isPlaying", false);
         }
         call.resolve(result);
+    }
+
+    @PluginMethod
+    public void pause(PluginCall call) {
+        if (focusManager != null) {
+            focusManager.pause();
+        }
+        call.resolve();
     }
 
     @Override

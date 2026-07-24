@@ -152,6 +152,8 @@ class AudioService {
 
   // ==================== Native AudioFocus (Android 车机/蓝牙/方向盘) ====================
 
+  private audioFocusHasFocus = false;
+
   private async initNativeAudioFocus() {
     try {
       // 监听原生媒体按钮事件（方向盘/蓝牙耳机）
@@ -177,20 +179,44 @@ class AudioService {
         }
       });
 
-      // 监听焦点丢失（电话、其他 app 抢占音频）—— 暂停播放
-      AudioFocus.addListener('audioFocusLost', (data: { transient: boolean }) => {
+      // 监听焦点丢失（电话、其他 app 抢占音频）
+      AudioFocus.addListener('audioFocusLost', async (data: { transient: boolean }) => {
         console.log('AudioFocus lost, transient:', data.transient);
+        this.audioFocusHasFocus = false;
+        // 暂停播放
         this.audio.pause();
+        // 如果是瞬态丢失（通知音等），短暂延迟后尝试抢回
+        if (data.transient) {
+          setTimeout(async () => {
+            try {
+              const result = await AudioFocus.requestFocus();
+              if (result.granted) {
+                this.audioFocusHasFocus = true;
+                console.log('AudioFocus regained after transient loss');
+              }
+            } catch (e) { /* ignore */ }
+          }, 1500);
+        }
       });
 
-      // 监听焦点恢复
+      // 监听焦点恢复（系统重新授予）
       AudioFocus.addListener('audioFocusGained', () => {
         console.log('AudioFocus regained');
+        this.audioFocusHasFocus = true;
       });
 
-      // 注册原生 AudioFocus
-      await AudioFocus.requestFocus();
-      console.log('Native AudioFocus plugin initialized');
+      // 注册原生 AudioFocus — 先尝试永久获取，失败则瞬态
+      const result = await AudioFocus.requestFocus();
+      if (result.granted) {
+        this.audioFocusHasFocus = true;
+        console.log('Native AudioFocus acquired (permanent)');
+      } else {
+        // 用瞬态重试（车载场景常见）
+        console.log('AudioFocus permanent denied, trying transient...');
+        const transientResult = await AudioFocus.requestFocusTransient();
+        this.audioFocusHasFocus = transientResult.granted;
+        console.log('Native AudioFocus transient:', transientResult.granted ? 'acquired' : 'denied');
+      }
     } catch (e) {
       // 非 Capacitor 环境或无插件时静默失败
       console.log('Native AudioFocus not available:', e);
