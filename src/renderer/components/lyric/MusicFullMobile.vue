@@ -58,6 +58,10 @@
         <div v-if="showFullLyrics && !isLandscape" class="fullscreen-lyrics" :class="config.theme">
           <div class="fullscreen-header">
             <div class="song-title" v-html="playMusic.name"></div>
+            <span
+              v-if="qualityLabel"
+              class="quality-badge-full"
+            >{{ qualityLabel }}</span>
             <div class="artist-name">
               <span v-for="(item, index) in artistList" :key="index">
                 {{ item.name }}{{ index < artistList.length - 1 ? ' / ' : '' }}
@@ -142,6 +146,10 @@
             <div class="song-info">
               <div class="song-title-container">
                 <h1 class="song-title" v-html="playMusic.name"></h1>
+                <span
+                  v-if="qualityLabel"
+                  class="quality-badge-full portrait"
+                >{{ qualityLabel }}</span>
               </div>
               <p class="song-artist">
                 <span
@@ -250,6 +258,10 @@
           <div class="landscape-song-info">
             <div class="flex flex-col flex-1">
               <h1 class="song-title" v-html="playMusic.name"></h1>
+              <span
+                v-if="qualityLabel"
+                class="quality-badge-full landscape"
+              >{{ qualityLabel }}</span>
               <p class="song-artist">
                 <span
                   v-for="(item, index) in artistList"
@@ -419,6 +431,22 @@ import { showBottomToast } from '@/utils/shortcutToast';
 
 const { t } = useI18n();
 const playerStore = usePlayerStore();
+
+// 音质标签
+const levelMap: Record<string, string> = {
+  standard: '标准',
+  higher: 'HQ',
+  exhigh: 'SQ',
+  lossless: '无损',
+  hires: 'Hi-Res'
+};
+const qualityLabel = computed(() => {
+  const q = playerStore.playMusicQuality;
+  if (!q) return '';
+  const label = levelMap[q.level] || q.level.toUpperCase();
+  const kbps = q.br ? ` ${Math.round(q.br / 1000)}kbps` : '';
+  return `${label}${kbps}`;
+});
 
 // 播放控制相关
 const play = computed(() => playerStore.isPlay);
@@ -1723,6 +1751,22 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
   .song-title {
     @apply text-center text-2xl font-bold max-w-[80%] truncate;
     color: var(--text-color-active);
+  }
+}
+
+// 音质标签 - 全屏
+.quality-badge-full {
+  @apply inline-block px-2 py-0.5 text-xs leading-none rounded font-medium
+         bg-blue-500/20 text-blue-400 border border-blue-400/30;
+  margin-top: 2px;
+
+  &.landscape {
+    @apply self-start;
+  }
+
+  &.portrait {
+    @apply mx-auto;
+    max-width: fit-content;
   }
 }
 

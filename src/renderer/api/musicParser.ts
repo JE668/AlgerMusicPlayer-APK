@@ -522,13 +522,19 @@ export class MusicParser {
           const apiResult = await apiRequest.get('/song/url/v1', {
             params: { id, level: 'higher', timestamp: Date.now() }
           });
-          const url = apiResult?.data?.data?.[0]?.url;
+          const songItem = apiResult?.data?.data?.[0];
+          const url = songItem?.url;
           if (url) {
             return {
               data: {
                 code: 200,
                 message: 'success',
-                data: { url }
+                data: {
+                  url,
+                  br: songItem?.br || 0,
+                  level: songItem?.level || 'higher',
+                  encodeType: songItem?.encodeType || 'mp3'
+                }
               }
             };
           }

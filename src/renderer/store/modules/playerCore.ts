@@ -19,6 +19,8 @@ export const usePlayerCoreStore = defineStore(
     const isPlay = ref(false);
     const playMusic = ref<SongResult>({} as SongResult);
     const playMusicUrl = ref('');
+    // 当前播放音质信息：{ br (码率), level (等级), encodeType (编码) }
+    const playMusicQuality = ref<{ br: number; level: string; encodeType: string } | null>(null);
     const musicFull = ref(false);
     const playbackRate = ref(1.0);
     const volume = ref(1);
@@ -189,6 +191,7 @@ export const usePlayerCoreStore = defineStore(
       isPlay,
       playMusic,
       playMusicUrl,
+      playMusicQuality,
       musicFull,
       playbackRate,
       volume,

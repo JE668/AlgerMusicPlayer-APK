@@ -148,6 +148,35 @@ const updateDocumentTitle = (music: SongResult): void => {
   document.title = 'AlgerMusic - ' + title;
 };
 
+/**
+ * 并行获取音质信息（轻量，失败不阻塞播放）
+ */
+const fetchQualityInfo = async (
+  id: string | number
+): Promise<{ br: number; level: string; encodeType: string } | null> => {
+  const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+  try {
+    const { default: apiRequest } = await import('@/utils/request');
+    const apiResult = await apiRequest.get('/song/url/v1', {
+      params: { id: numericId, level: 'higher', timestamp: Date.now() },
+      timeout: 5000
+    });
+    const item = apiResult?.data?.data?.[0];
+    if (item && (item.br || item.level || item.encodeType)) {
+      console.log(`[quality] ${id} → br=${item.br}, level=${item.level}, encodeType=${item.encodeType}`);
+      return {
+        br: item.br || 0,
+        level: item.level || 'unknown',
+        encodeType: item.encodeType || 'unknown'
+      };
+    }
+  } catch (e) {
+    // 静默失败，不影响播放
+    console.debug(`[quality] 获取音质信息失败 (id=${id}):`, (e as Error).message);
+  }
+  return null;
+};
+
 // ==================== 导出函数 ====================
 
 /**
@@ -176,6 +205,7 @@ export const playTrack = async (
 
   // 2. 停止当前音频
   audioService.stop();
+  playerCore.playMusicQuality = null;
 
   // 验证 & 激活请求
   if (!playbackRequestManager.isRequestValid(requestId)) {
@@ -256,6 +286,11 @@ export const playTrack = async (
     music.playMusicUrl = updatedPlayMusic.playMusicUrl as string;
     // playMusic 被替换为新对象，若元数据已先行到达则重新应用，避免歌词/背景色丢失
     applyLoadedMetadata();
+
+    // 6.5 并行获取音质信息（fire-and-forget，失败不阻塞播放）
+    fetchQualityInfo(originalMusic.id).then((q) => {
+      if (q && gen === generation) playerCore.playMusicQuality = q;
+    });
   } catch (error) {
     if (gen !== generation) return false;
     console.error('[playbackController] 获取歌曲详情失败:', error);
@@ -372,6 +407,16 @@ export const reparseCurrentSong = async (
         playMusicUrl: newUrl,
         expiredAt: Date.now() + 1800000
       };
+
+      // 更新音质信息
+      const qData = res.data.data;
+      if (qData && (qData.br || qData.level)) {
+        playerCore.playMusicQuality = {
+          br: qData.br || 0,
+          level: qData.level || 'unknown',
+          encodeType: qData.encodeType || 'unknown'
+        };
+      }
 
       await playTrack(updatedMusic, true);
 

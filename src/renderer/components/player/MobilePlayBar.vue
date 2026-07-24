@@ -30,6 +30,10 @@
         <div class="mini-song-text">
           <n-ellipsis line-clamp="1">
             <span class="mini-song-title">{{ playMusic.name }}</span>
+            <span
+              v-if="qualityLabel"
+              class="quality-badge-mini"
+            >{{ qualityLabel }}</span>
             <span class="mx-2 text-gray-500 dark:text-gray-400">-</span>
             <span
               class="mini-song-artist"
@@ -62,7 +66,7 @@
 <script lang="ts" setup>
 import { useSwipe } from '@vueuse/core';
 import type { Ref } from 'vue';
-import { inject, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 
 import MusicFullWrapper from '@/components/lyric/MusicFullWrapper.vue';
 import { artistList, playMusic, textColors } from '@/hooks/MusicHook';
@@ -102,6 +106,24 @@ watch(
 const openPlayListDrawer = () => {
   playerStore.setPlayListDrawerVisible(true);
 };
+
+// 音质标签格式化
+const qualityLabel = computed(() => {
+  const q = playerStore.playMusicQuality;
+  if (!q) return '';
+  const { br, level } = q;
+  // level 映射为可读标签
+  const levelMap: Record<string, string> = {
+    standard: '标准',
+    higher: 'HQ',
+    exhigh: 'SQ',
+    lossless: '无损',
+    hires: 'Hi-Res'
+  };
+  const label = levelMap[level] || level.toUpperCase();
+  const kbps = br ? ` ${Math.round(br / 1000)}kbps` : '';
+  return `${label}${kbps}`;
+});
 
 // 滑动切歌
 const playBarRef = ref<HTMLElement | null>(null);
@@ -210,6 +232,14 @@ watch(
         @apply text-xs text-white opacity-70 mt-1;
       }
     }
+  }
+
+  // 音质标签 - mini 栏
+  .quality-badge-mini {
+    @apply inline-block px-1.5 py-0.5 text-[10px] leading-none rounded font-medium
+           bg-blue-500/20 text-blue-400 border border-blue-400/30;
+    margin-left: 4px;
+    vertical-align: middle;
   }
 
   // 主控制区
