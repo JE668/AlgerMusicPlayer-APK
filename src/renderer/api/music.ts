@@ -233,3 +233,10 @@ export function getIntelligenceList(params: { id: number; pid: number; sid?: num
 export const getSimilarSongs = (id: number) => {
   return request.get('/simi/song', { params: { id, timestamp: Date.now() } });
 };
+
+// 搜索歌词（按歌词片段搜索歌曲）
+export const searchSongByLyric = (keyword: string, limit: number = 20) => {
+  return request.get('/search', {
+    params: { keywords: keyword, type: 1, limit, timestamp: Date.now() }
+  });
+};
