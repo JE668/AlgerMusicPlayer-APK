@@ -289,9 +289,15 @@ export const playTrack = async (
     applyLoadedMetadata();
 
     // 6.5 并行获取音质信息（fire-and-forget，失败不阻塞播放，平台信息在播放成功后补充）
+    // ⚠️ 注意：该 Promise 可能在 step 9.5 之后才 resolve，必须合并而非覆盖
     fetchQualityInfo(originalMusic.id).then((q) => {
       if (q && gen === generation) {
-        playerCore.playMusicQuality = { ...q };
+        const existing = playerCore.playMusicQuality || {};
+        playerCore.playMusicQuality = {
+          ...q,
+          // 保留已设置的平台字段（step 9.5 可能在 fetchQualityInfo 之前执行）
+          platform: existing.platform || q.platform
+        };
       }
     });
   } catch (error) {
