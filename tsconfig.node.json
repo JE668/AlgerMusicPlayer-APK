@@ -13,19 +13,20 @@
       "electron-vite/node"
     ],
     "moduleResolution": "bundler",
-  },
-  "paths": {
-    "@/*": [
-      "src/renderer/*"
-    ],
-    "@renderer/*": [
-      "src/renderer/*"
-    ],
-    "@main/*": [
-      "src/main/*"
-    ],
-    "@i18n/*": [
-      "src/i18n/*"
-    ]
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "src/renderer/*"
+      ],
+      "@renderer/*": [
+        "src/renderer/*"
+      ],
+      "@main/*": [
+        "src/main/*"
+      ],
+      "@i18n/*": [
+        "src/i18n/*"
+      ]
+    }
   }
 }
