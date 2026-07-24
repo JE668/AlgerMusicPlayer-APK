@@ -461,7 +461,6 @@ const qualityLabel = computed(() => {
 });
 
 const platformMap: Record<string, string> = {
-  lxMusic: '落雪',
   custom: '自定义',
   gdmusic: 'GD音乐台',
   unblockMusic: '第三方'

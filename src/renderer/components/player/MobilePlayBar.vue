@@ -130,7 +130,6 @@ const qualityLabel = computed(() => {
 
 // 音源平台标签
 const platformMap: Record<string, string> = {
-  lxMusic: '落雪',
   custom: '自定义',
   gdmusic: 'GD音乐台',
   unblockMusic: '第三方'

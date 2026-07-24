@@ -228,3 +228,8 @@ export function getIntelligenceList(params: { id: number; pid: number; sid?: num
     params
   });
 }
+
+// 相似歌曲推荐
+export const getSimilarSongs = (id: number) => {
+  return request.get('/simi/song', { params: { id, timestamp: Date.now() } });
+};

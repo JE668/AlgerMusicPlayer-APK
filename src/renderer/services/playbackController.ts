@@ -288,10 +288,10 @@ export const playTrack = async (
     // playMusic 被替换为新对象，若元数据已先行到达则重新应用，避免歌词/背景色丢失
     applyLoadedMetadata();
 
-    // 6.5 并行获取音质信息（fire-and-forget，失败不阻塞播放）
+    // 6.5 并行获取音质信息（fire-and-forget，失败不阻塞播放，平台信息在播放成功后补充）
     fetchQualityInfo(originalMusic.id).then((q) => {
       if (q && gen === generation) {
-        playerCore.playMusicQuality = { ...q, platform: lastResolvedPlatform || undefined };
+        playerCore.playMusicQuality = { ...q };
       }
     });
   } catch (error) {
@@ -323,8 +323,16 @@ export const playTrack = async (
       resetUrlExpiredRetry();
       playerCore.playMusic.playLoading = false;
       playerCore.playMusic.isFirstPlay = false;
+
+      // 9.5 补充音源平台信息（此时 URL 解析已完成，lastResolvedPlatform 准确）
+      if (lastResolvedPlatform) {
+        playerCore.playMusicQuality = playerCore.playMusicQuality
+          ? { ...playerCore.playMusicQuality, platform: lastResolvedPlatform }
+          : { br: 0, level: '', encodeType: '', platform: lastResolvedPlatform };
+      }
+
       playbackRequestManager.completeRequest(requestId);
-      console.log(`[playbackController] gen=${gen} 播放成功: ${music.name}`);
+      console.log(`[playbackController] gen=${gen} 播放成功: ${music.name} (platform: ${lastResolvedPlatform})`);
 
       // 10. 触发预加载下一首（立即触发，不等待）
       triggerPreload(playerCore.playMusic);
@@ -417,7 +425,8 @@ export const reparseCurrentSong = async (
         playerCore.playMusicQuality = {
           br: qData.br || 0,
           level: qData.level || 'unknown',
-          encodeType: qData.encodeType || 'unknown'
+          encodeType: qData.encodeType || 'unknown',
+          platform: lastResolvedPlatform || undefined
         };
       }
 
