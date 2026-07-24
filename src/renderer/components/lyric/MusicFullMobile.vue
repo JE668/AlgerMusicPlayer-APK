@@ -1168,16 +1168,9 @@ const fetchSimilarSongs = async () => {
   }
 };
 
-const playSimilarSong = async (item: any) => {
+const playSimilarSong = (item: any) => {
   showSimilarPanel.value = false;
-  const { useSongDetail } = await import('@/hooks/useSongDetail');
-  const { default: playerCore } = await import('@/store/modules/playerCore');
-  const { playTrack } = await import('@/services/playbackController');
-  const song = await useSongDetail().getSongDetail(item);
-  if (song) {
-    playerCore.playMusic = { ...item, ...song };
-    playTrack(playerCore.playMusic);
-  }
+  playerStore.setPlay(item);
 };
 
 // ==================== 歌词模糊搜索 ====================
@@ -1222,18 +1215,11 @@ const doSearch = async (keyword: string) => {
   }
 };
 
-const playSearchResult = async (item: any) => {
+const playSearchResult = (item: any) => {
   showSearchPanel.value = false;
   searchKeyword.value = '';
   searchResults.value = [];
-  const { useSongDetail } = await import('@/hooks/useSongDetail');
-  const { default: playerCore } = await import('@/store/modules/playerCore');
-  const { playTrack } = await import('@/services/playbackController');
-  const song = await useSongDetail().getSongDetail(item);
-  if (song) {
-    playerCore.playMusic = { ...item, ...song };
-    playTrack(playerCore.playMusic);
-  }
+  playerStore.setPlay(item);
 };
 
 // 添加对 playMusic.id 的监听，歌曲切换时滚动到顶部
