@@ -12,7 +12,7 @@ import { createDiscreteApi } from 'naive-ui';
 
 import i18n from '@/../i18n/renderer';
 import { getParsingMusicUrl } from '@/api/music';
-import { lastResolvedPlatform } from '@/api/musicParser';
+import { getResolvedPlatform, lastResolvedPlatform } from '@/api/musicParser';
 import { loadLrc, useSongDetail } from '@/hooks/usePlayerHooks';
 import { audioService } from '@/services/audioService';
 import { playbackRequestManager } from '@/services/playbackRequestManager';
@@ -324,15 +324,17 @@ export const playTrack = async (
       playerCore.playMusic.playLoading = false;
       playerCore.playMusic.isFirstPlay = false;
 
-      // 9.5 补充音源平台信息（此时 URL 解析已完成，lastResolvedPlatform 准确）
-      if (lastResolvedPlatform) {
+      // 9.5 补充音源平台信息（优先使用 Map 按歌曲 ID 查询，fallback 到全局变量）
+      const songId = typeof music.id === 'number' ? music.id : parseInt(String(music.id), 10);
+      const resolvedPlatform = getResolvedPlatform(songId) || lastResolvedPlatform;
+      if (resolvedPlatform) {
         playerCore.playMusicQuality = playerCore.playMusicQuality
-          ? { ...playerCore.playMusicQuality, platform: lastResolvedPlatform }
-          : { br: 0, level: '', encodeType: '', platform: lastResolvedPlatform };
+          ? { ...playerCore.playMusicQuality, platform: resolvedPlatform }
+          : { br: 0, level: '', encodeType: '', platform: resolvedPlatform };
       }
 
       playbackRequestManager.completeRequest(requestId);
-      console.log(`[playbackController] gen=${gen} 播放成功: ${music.name} (platform: ${lastResolvedPlatform})`);
+      console.log(`[playbackController] gen=${gen} 播放成功: ${music.name} (platform: ${resolvedPlatform})`);
 
       // 10. 触发预加载下一首（立即触发，不等待）
       triggerPreload(playerCore.playMusic);
@@ -419,14 +421,14 @@ export const reparseCurrentSong = async (
         expiredAt: Date.now() + 1800000
       };
 
-      // 更新音质信息
+      // 更新音质信息 — 优先从解析结果提取平台字段，无需依赖全局变量
       const qData = res.data.data;
       if (qData && (qData.br || qData.level)) {
         playerCore.playMusicQuality = {
           br: qData.br || 0,
           level: qData.level || 'unknown',
           encodeType: qData.encodeType || 'unknown',
-          platform: lastResolvedPlatform || undefined
+          platform: qData.platform || undefined
         };
       }
 

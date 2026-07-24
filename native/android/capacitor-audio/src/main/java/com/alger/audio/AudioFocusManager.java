@@ -31,6 +31,10 @@ public class AudioFocusManager {
     // 静态字段，供 MediaBrowserService 获取 session token
     private static MediaSessionCompat staticMediaSession = null;
 
+    // 静态回调，MediaBrowserService 注册，当 MediaSession 创建完毕时自动接收通知
+    // 比固定延迟重试更可靠 — 无论插件加载多久，session 就绪后立即注入 token
+    public static Runnable onSessionReadyCallback = null;
+
     public static MediaSessionCompat getStaticMediaSession() {
         return staticMediaSession;
     }
@@ -92,6 +96,10 @@ public class AudioFocusManager {
 
         mediaSession = new MediaSessionCompat(appContext, "AlgerMusicPlayer");
         staticMediaSession = mediaSession;
+        // 通知 MediaBrowserService：session 已就绪，自动注入 token
+        if (onSessionReadyCallback != null) {
+            onSessionReadyCallback.run();
+        }
         mediaSession.setFlags(
                 MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS |
                 MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS

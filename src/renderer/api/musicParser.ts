@@ -14,8 +14,33 @@ import { parseFromCustomApi } from './parseFromCustomApi';
 
 const { saveData, getData, deleteData } = musicDB;
 
-// 记录最后一次成功解析的音源平台（供 playbackController 读取）
+// 音源平台追踪 — 按歌曲 ID 存储，避免并发调用竞态
+const resolvedPlatforms = new Map<number, string>();
+
+/**
+ * 获取某首歌已解析的音源平台名
+ */
+export const getResolvedPlatform = (songId: number): string | undefined => {
+  return resolvedPlatforms.get(songId);
+};
+
+/**
+ * 清理指定歌曲的平台缓存
+ */
+export const clearResolvedPlatform = (songId: number): void => {
+  resolvedPlatforms.delete(songId);
+};
+
+// 旧版单值导出，兼容现有引用（后续逐步迁移到 getResolvedPlatform）
 export let lastResolvedPlatform: string | null = null;
+
+// 定期清理过期缓存，防止内存泄漏
+setInterval(() => {
+  if (resolvedPlatforms.size > 100) {
+    resolvedPlatforms.clear();
+    console.log('[musicParser] 清理平台缓存，当前数量:', resolvedPlatforms.size);
+  }
+}, 600000); // 10分钟
 
 /**
  * 音乐解析结果接口
@@ -613,6 +638,10 @@ export class MusicParser {
               result.data.data.platform = strategy.name;
             }
             lastResolvedPlatform = strategy.name;
+            // 也按歌曲 ID 存入 Map，供并发安全的 getResolvedPlatform 使用
+            if (id !== undefined) {
+              resolvedPlatforms.set(id, strategy.name);
+            }
             const endTime = performance.now();
             console.log(
               `解析成功，使用策略: ${strategy.name}，耗时: ${(endTime - startTime).toFixed(2)}ms`
