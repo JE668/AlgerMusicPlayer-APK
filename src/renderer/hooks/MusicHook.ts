@@ -1,5 +1,5 @@
 import { cloneDeep } from 'lodash';
-import { computed, type ComputedRef, nextTick, onUnmounted, ref, watch } from 'vue';
+import { computed, type ComputedRef, nextTick, ref, watch } from 'vue';
 
 import useIndexedDB from '@/hooks/IndexDBHook';
 import { audioService } from '@/services/audioService';
@@ -376,21 +376,24 @@ const setupAudioListeners = () => {
           }
         }
 
-        // === localStorage 进度保存（每 ~2 秒）===
-        if (
-          Math.floor(currentTime) % 2 === 0 &&
-          Math.floor(currentTime) !== Math.floor(lastSavedProgress)
-        ) {
+        // === localStorage 进度保存（防抖 5 秒，避免 50ms interval 高频 I/O）===
+        if (getPlayerStore().playMusic?.id) {
           lastSavedProgress = currentTime;
-          if (getPlayerStore().playMusic?.id) {
-            localStorage.setItem(
-              'playProgress',
-              JSON.stringify({
-                songId: getPlayerStore().playMusic.id,
-                progress: currentTime
-              })
-            );
-          }
+          // 用 setTimeout 防抖：5 秒内多次触发只写最后一次
+          clearTimeout((window as any).__progressSaveTimer);
+          (window as any).__progressSaveTimer = setTimeout(() => {
+            try {
+              localStorage.setItem(
+                'playProgress',
+                JSON.stringify({
+                  songId: getPlayerStore().playMusic.id,
+                  progress: lastSavedProgress
+                })
+              );
+            } catch {
+              // localStorage 满或不可用时静默忽略
+            }
+          }, 5000);
         }
 
         // === MPRIS 进度更新（每 ~1 秒）===

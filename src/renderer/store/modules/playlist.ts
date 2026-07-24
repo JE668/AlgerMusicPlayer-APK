@@ -382,17 +382,16 @@ export const usePlaylistStore = defineStore(
       const playerCore = usePlayerCoreStore();
 
       audioService.pause();
-      setTimeout(() => {
-        playerCore.playMusic = {} as SongResult;
-        playerCore.playMusicUrl = '';
-        playList.value = [];
-        playListIndex.value = 0;
-        originalPlayList.value = [];
-        // 只清除 playerCore 的 localStorage（这些由 playerCore store 管理）
-        localStorage.removeItem('currentPlayMusic');
-        localStorage.removeItem('currentPlayMusicUrl');
-        // playlist 状态由 pinia-plugin-persistedstate 自动管理
-      }, 500);
+      // 直接清空状态，无需延迟（audioService.pause() 是同步操作）
+      playerCore.playMusic = {} as SongResult;
+      playerCore.playMusicUrl = '';
+      playList.value = [];
+      playListIndex.value = 0;
+      originalPlayList.value = [];
+      // 只清除 playerCore 的 localStorage（这些由 playerCore store 管理）
+      localStorage.removeItem('currentPlayMusic');
+      localStorage.removeItem('currentPlayMusicUrl');
+      // playlist 状态由 pinia-plugin-persistedstate 自动管理
     };
 
     /**
