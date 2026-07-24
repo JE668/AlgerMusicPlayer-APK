@@ -32,7 +32,7 @@ export const getMusicUrl = async (id: number, isDownloaded: boolean = false) => 
         params: {
           id,
           level: settingStore.setData.musicQuality || 'higher',
-          encodeType: settingStore.setData.musicQuality == 'lossless' ? 'aac' : 'flac',
+          encodeType: settingStore.setData.musicQuality == 'lossless' ? 'flac' : 'mp3',
           cookie: `${localStorage.getItem('token')} os=pc;`
         }
       });
@@ -49,7 +49,7 @@ export const getMusicUrl = async (id: number, isDownloaded: boolean = false) => 
     params: {
       id,
       level: settingStore.setData.musicQuality || 'higher',
-      encodeType: settingStore.setData.musicQuality == 'lossless' ? 'aac' : 'flac'
+      encodeType: settingStore.setData.musicQuality == 'lossless' ? 'flac' : 'mp3'
     }
   });
 };
