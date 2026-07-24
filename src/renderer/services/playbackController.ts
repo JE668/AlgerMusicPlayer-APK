@@ -12,6 +12,7 @@ import { createDiscreteApi } from 'naive-ui';
 
 import i18n from '@/../i18n/renderer';
 import { getParsingMusicUrl } from '@/api/music';
+import { lastResolvedPlatform } from '@/api/musicParser';
 import { loadLrc, useSongDetail } from '@/hooks/usePlayerHooks';
 import { audioService } from '@/services/audioService';
 import { playbackRequestManager } from '@/services/playbackRequestManager';
@@ -289,7 +290,9 @@ export const playTrack = async (
 
     // 6.5 并行获取音质信息（fire-and-forget，失败不阻塞播放）
     fetchQualityInfo(originalMusic.id).then((q) => {
-      if (q && gen === generation) playerCore.playMusicQuality = q;
+      if (q && gen === generation) {
+        playerCore.playMusicQuality = { ...q, platform: lastResolvedPlatform || undefined };
+      }
     });
   } catch (error) {
     if (gen !== generation) return false;

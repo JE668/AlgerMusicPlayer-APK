@@ -1,4 +1,5 @@
 import { cloneDeep } from 'lodash';
+import { ref } from 'vue';
 
 import { musicDB } from '@/hooks/MusicHook';
 import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
@@ -13,6 +14,9 @@ import { parseFromCustomApi } from './parseFromCustomApi';
 
 const { saveData, getData, deleteData } = musicDB;
 
+// 记录最后一次成功解析的音源平台（供 playbackController 读取）
+export let lastResolvedPlatform: string | null = null;
+
 /**
  * 音乐解析结果接口
  */
@@ -22,6 +26,7 @@ export interface MusicParseResult {
     message: string;
     data?: {
       url: string;
+      platform?: string;
       [key: string]: any;
     };
   };
@@ -604,6 +609,10 @@ export class MusicParser {
         try {
           const result = await strategy.parse(id, data, quality, musicSources);
           if (result?.data?.data?.url) {
+            if (result.data.data) {
+              result.data.data.platform = strategy.name;
+            }
+            lastResolvedPlatform = strategy.name;
             const endTime = performance.now();
             console.log(
               `解析成功，使用策略: ${strategy.name}，耗时: ${(endTime - startTime).toFixed(2)}ms`

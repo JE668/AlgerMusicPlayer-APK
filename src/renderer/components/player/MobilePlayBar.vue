@@ -34,6 +34,10 @@
               v-if="qualityLabel"
               class="quality-badge-mini"
             >{{ qualityLabel }}</span>
+            <span
+              v-if="sourceLabel"
+              class="source-badge-mini"
+            >{{ sourceLabel }}</span>
             <span class="mx-2 text-gray-500 dark:text-gray-400">-</span>
             <span
               class="mini-song-artist"
@@ -112,7 +116,6 @@ const qualityLabel = computed(() => {
   const q = playerStore.playMusicQuality;
   if (!q) return '';
   const { br, level } = q;
-  // level 映射为可读标签
   const levelMap: Record<string, string> = {
     standard: '标准',
     higher: 'HQ',
@@ -123,6 +126,19 @@ const qualityLabel = computed(() => {
   const label = levelMap[level] || level.toUpperCase();
   const kbps = br ? ` ${Math.round(br / 1000)}kbps` : '';
   return `${label}${kbps}`;
+});
+
+// 音源平台标签
+const platformMap: Record<string, string> = {
+  lxMusic: '落雪',
+  custom: '自定义',
+  gdmusic: 'GD音乐台',
+  unblockMusic: '第三方'
+};
+const sourceLabel = computed(() => {
+  const q = playerStore.playMusicQuality;
+  if (!q?.platform) return '';
+  return platformMap[q.platform] || q.platform;
 });
 
 // 滑动切歌
@@ -238,6 +254,13 @@ watch(
   .quality-badge-mini {
     @apply inline-block px-1.5 py-0.5 text-[10px] leading-none rounded font-medium
            bg-blue-500/20 text-blue-400 border border-blue-400/30;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+
+  .source-badge-mini {
+    @apply inline-block px-1.5 py-0.5 text-[10px] leading-none rounded font-medium
+           bg-emerald-500/20 text-emerald-400 border border-emerald-400/30;
     margin-left: 4px;
     vertical-align: middle;
   }

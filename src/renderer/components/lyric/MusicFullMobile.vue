@@ -62,6 +62,10 @@
               v-if="qualityLabel"
               class="quality-badge-full"
             >{{ qualityLabel }}</span>
+            <span
+              v-if="sourceLabel"
+              class="source-badge-full"
+            >{{ sourceLabel }}</span>
             <div class="artist-name">
               <span v-for="(item, index) in artistList" :key="index">
                 {{ item.name }}{{ index < artistList.length - 1 ? ' / ' : '' }}
@@ -150,6 +154,10 @@
                   v-if="qualityLabel"
                   class="quality-badge-full portrait"
                 >{{ qualityLabel }}</span>
+                <span
+                  v-if="sourceLabel"
+                  class="source-badge-full portrait"
+                >{{ sourceLabel }}</span>
               </div>
               <p class="song-artist">
                 <span
@@ -262,6 +270,10 @@
                 v-if="qualityLabel"
                 class="quality-badge-full landscape"
               >{{ qualityLabel }}</span>
+              <span
+                v-if="sourceLabel"
+                class="source-badge-full landscape"
+              >{{ sourceLabel }}</span>
               <p class="song-artist">
                 <span
                   v-for="(item, index) in artistList"
@@ -446,6 +458,18 @@ const qualityLabel = computed(() => {
   const label = levelMap[q.level] || q.level.toUpperCase();
   const kbps = q.br ? ` ${Math.round(q.br / 1000)}kbps` : '';
   return `${label}${kbps}`;
+});
+
+const platformMap: Record<string, string> = {
+  lxMusic: '落雪',
+  custom: '自定义',
+  gdmusic: 'GD音乐台',
+  unblockMusic: '第三方'
+};
+const sourceLabel = computed(() => {
+  const q = playerStore.playMusicQuality;
+  if (!q?.platform) return '';
+  return platformMap[q.platform] || q.platform;
 });
 
 // 播放控制相关
@@ -1758,6 +1782,21 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
 .quality-badge-full {
   @apply inline-block px-2 py-0.5 text-xs leading-none rounded font-medium
          bg-blue-500/20 text-blue-400 border border-blue-400/30;
+  margin-top: 2px;
+
+  &.landscape {
+    @apply self-start;
+  }
+
+  &.portrait {
+    @apply mx-auto;
+    max-width: fit-content;
+  }
+}
+
+.source-badge-full {
+  @apply inline-block px-2 py-0.5 text-xs leading-none rounded font-medium
+         bg-emerald-500/20 text-emerald-400 border border-emerald-400/30;
   margin-top: 2px;
 
   &.landscape {
