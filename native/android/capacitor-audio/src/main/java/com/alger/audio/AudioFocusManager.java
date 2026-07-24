@@ -28,6 +28,13 @@ public class AudioFocusManager {
     private static final String CHANNEL_ID = "alger_playback";
     private static final int NOTIFICATION_ID = 1001;
 
+    // 静态字段，供 MediaBrowserService 获取 session token
+    private static MediaSessionCompat staticMediaSession = null;
+
+    public static MediaSessionCompat getStaticMediaSession() {
+        return staticMediaSession;
+    }
+
     private AudioManager audioManager;
     private MediaSessionCompat mediaSession;
     private AudioFocusRequest focusRequest;
@@ -84,6 +91,7 @@ public class AudioFocusManager {
         );
 
         mediaSession = new MediaSessionCompat(appContext, "AlgerMusicPlayer");
+        staticMediaSession = mediaSession;
         mediaSession.setFlags(
                 MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS |
                 MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
@@ -455,6 +463,7 @@ public class AudioFocusManager {
             }
             mediaSession.release();
             mediaSession = null;
+            staticMediaSession = null;
         }
     }
 
