@@ -322,6 +322,14 @@ public class AudioFocusManager {
 
             int result = audioManager.requestAudioFocus(focusRequest);
             hasAudioFocus = (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED);
+        } else {
+            // API < 26 兼容
+            int result = audioManager.requestAudioFocus(
+                    afChangeListener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+            );
+            hasAudioFocus = (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED);
         }
 
         if (hasAudioFocus && !sessionActive && mediaSession != null) {
@@ -365,9 +373,8 @@ public class AudioFocusManager {
                 if (focusCallback != null) focusCallback.onAudioFocusLost(true);
                 break;
             case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
-                // 短暂失去焦点但可以降低音量继续播放
-                hasAudioFocus = true; // 保持播放，只降低音量
-                if (focusCallback != null) focusCallback.onAudioFocusLost(true);
+                // 短暂失去焦点但可以降低音量继续播放 — 不暂停，不触发回调
+                // 保持 hasAudioFocus = true，播放继续
                 break;
         }
     }

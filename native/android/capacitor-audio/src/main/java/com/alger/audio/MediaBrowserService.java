@@ -1,6 +1,8 @@
 package com.alger.audio;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.v4.media.MediaBrowserCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 
@@ -26,9 +28,18 @@ public class MediaBrowserService extends MediaBrowserServiceCompat {
         super.onCreate();
 
         // 获取 AudioFocusManager 中已创建的 MediaSession
+        // 如果插件尚未加载，延迟重试等待初始化
         MediaSessionCompat mediaSession = AudioFocusManager.getStaticMediaSession();
         if (mediaSession != null) {
             setSessionToken(mediaSession.getSessionToken());
+        } else {
+            // 延迟重试，等待 Capacitor 插件加载完成
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                MediaSessionCompat ms = AudioFocusManager.getStaticMediaSession();
+                if (ms != null) {
+                    setSessionToken(ms.getSessionToken());
+                }
+            }, 1000);
         }
     }
 
