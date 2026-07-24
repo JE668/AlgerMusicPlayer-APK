@@ -154,7 +154,7 @@ const updateDocumentTitle = (music: SongResult): void => {
  */
 const fetchQualityInfo = async (
   id: string | number
-): Promise<{ br: number; level: string; encodeType: string } | null> => {
+): Promise<{ br: number; level: string; encodeType: string; platform?: string } | null> => {
   const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
   try {
     const { default: apiRequest } = await import('@/utils/request');
@@ -200,7 +200,7 @@ export const playTrack = async (
 
   // 如果是新歌曲，重置已尝试的音源
   const playerCore = await getPlayerCoreStore();
-  if (music.id !== playerCore.playMusic.id) {
+  if (String(music.id) !== String(playerCore.playMusic.id)) {
     SongSourceConfigManager.clearTriedSources(music.id);
   }
 
@@ -292,12 +292,12 @@ export const playTrack = async (
     // ⚠️ 注意：该 Promise 可能在 step 9.5 之后才 resolve，必须合并而非覆盖
     fetchQualityInfo(originalMusic.id).then((q) => {
       if (q && gen === generation) {
-        const existing = playerCore.playMusicQuality || {};
+        const existing = playerCore.playMusicQuality || ({} as any);
         playerCore.playMusicQuality = {
           ...q,
           // 保留已设置的平台字段（step 9.5 可能在 fetchQualityInfo 之前执行）
-          platform: existing.platform || q.platform
-        };
+          platform: existing.platform || (q as any).platform
+        } as any;
       }
     });
   } catch (error) {
@@ -334,9 +334,11 @@ export const playTrack = async (
       const songId = typeof music.id === 'number' ? music.id : parseInt(String(music.id), 10);
       const resolvedPlatform = getResolvedPlatform(songId) || lastResolvedPlatform;
       if (resolvedPlatform) {
-        playerCore.playMusicQuality = playerCore.playMusicQuality
-          ? { ...playerCore.playMusicQuality, platform: resolvedPlatform }
-          : { br: 0, level: '', encodeType: '', platform: resolvedPlatform };
+        const currentQuality = playerCore.playMusicQuality || ({} as any);
+        playerCore.playMusicQuality = {
+          ...currentQuality,
+          platform: resolvedPlatform
+        } as any;
       }
 
       playbackRequestManager.completeRequest(requestId);
