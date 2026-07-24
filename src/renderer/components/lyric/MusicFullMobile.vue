@@ -406,7 +406,86 @@
           <div class="side-button" @click="showPlaylist">
             <i class="iconfont icon-list"></i>
           </div>
+          <div class="side-button" @click="toggleSimilarSongs">
+            <i class="ri-file-list-3-line" :class="{ active: showSimilarPanel }"></i>
+          </div>
+          <div class="side-button" @click="toggleLyricSearch">
+            <i class="ri-search-line" :class="{ active: showSearchPanel }"></i>
+          </div>
         </div>
+
+        <!-- 相似歌曲推荐面板 -->
+        <transition name="slide-up">
+          <div v-if="showSimilarPanel" class="overlay-panel similar-panel">
+            <div class="panel-header">
+              <span class="panel-title">相似歌曲推荐</span>
+              <i class="ri-close-line close-btn" @click="showSimilarPanel = false"></i>
+            </div>
+            <div v-if="similarLoading" class="panel-loading">
+              <i class="ri-loader-4-line loading-icon"></i>
+            </div>
+            <div v-else-if="similarError" class="panel-error">
+              {{ similarError }}
+            </div>
+            <div v-else class="panel-list">
+              <div
+                v-for="(item, idx) in similarSongs"
+                :key="item.id"
+                class="panel-list-item"
+                @click="playSimilarSong(item)"
+              >
+                <span class="item-index">{{ idx + 1 }}</span>
+                <div class="item-info">
+                  <span class="item-name">{{ item.name }}</span>
+                  <span class="item-artist">{{ item.artists?.map((a) => a.name).join(' / ') || item.artists?.[0]?.name || '未知' }}</span>
+                </div>
+                <i class="ri-play-circle-line item-play"></i>
+              </div>
+              <div v-if="similarSongs.length === 0" class="panel-empty">暂无相似歌曲</div>
+            </div>
+          </div>
+        </transition>
+
+        <!-- 歌词模糊搜索面板 -->
+        <transition name="slide-up">
+          <div v-if="showSearchPanel" class="overlay-panel search-panel">
+            <div class="panel-header">
+              <span class="panel-title">歌词搜索</span>
+              <i class="ri-close-line close-btn" @click="showSearchPanel = false"></i>
+            </div>
+            <div class="search-input-wrapper">
+              <i class="ri-search-line search-icon"></i>
+              <input
+                v-model="searchKeyword"
+                class="search-input"
+                placeholder="输入歌词片段搜索歌曲..."
+                @input="onSearchInput"
+              />
+            </div>
+            <div v-if="searchLoading" class="panel-loading">
+              <i class="ri-loader-4-line loading-icon"></i>
+            </div>
+            <div v-else-if="searchError" class="panel-error">
+              {{ searchError }}
+            </div>
+            <div v-else class="panel-list">
+              <div
+                v-for="(item, idx) in searchResults"
+                :key="item.id"
+                class="panel-list-item"
+                @click="playSearchResult(item)"
+              >
+                <span class="item-index">{{ idx + 1 }}</span>
+                <div class="item-info">
+                  <span class="item-name">{{ item.name }}</span>
+                  <span class="item-artist">{{ item.artists?.map((a) => a.name).join(' / ') || item.artists?.[0]?.name || '未知' }}</span>
+                </div>
+                <i class="ri-play-circle-line item-play"></i>
+              </div>
+              <div v-if="searchKeyword && searchResults.length === 0 && !searchLoading" class="panel-empty">未找到匹配的歌曲</div>
+            </div>
+          </div>
+        </transition>
       </div>
     </div>
   </n-drawer>
@@ -416,6 +495,7 @@
 import { useWindowSize } from '@vueuse/core';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { getSimilarSongs, searchSongByLyric } from '@/api/music';
 
 import MobilePlayerSettings from '@/components/player/MobilePlayerSettings.vue';
 import {
@@ -1058,6 +1138,104 @@ const closeMusicFull = () => {
   playerStore.setMusicFull(false);
 };
 
+// ==================== 相似歌曲推荐 ====================
+let similarDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const showSimilarPanel = ref(false);
+const similarSongs = ref<any[]>([]);
+const similarLoading = ref(false);
+const similarError = ref('');
+
+const toggleSimilarSongs = () => {
+  showSimilarPanel.value = !showSimilarPanel.value;
+  if (showSimilarPanel.value) {
+    fetchSimilarSongs();
+  }
+};
+
+const fetchSimilarSongs = async () => {
+  const id = playMusic.value?.id;
+  if (!id) return;
+  similarLoading.value = true;
+  similarError.value = '';
+  try {
+    const res = await getSimilarSongs(id as number);
+    similarSongs.value = res?.data?.songs || [];
+  } catch (e: any) {
+    similarError.value = '加载失败: ' + (e?.message || '未知错误');
+    similarSongs.value = [];
+  } finally {
+    similarLoading.value = false;
+  }
+};
+
+const playSimilarSong = async (item: any) => {
+  showSimilarPanel.value = false;
+  const { useSongDetail } = await import('@/hooks/useSongDetail');
+  const { default: playerCore } = await import('@/store/modules/playerCore');
+  const { playTrack } = await import('@/services/playbackController');
+  const song = await useSongDetail().getSongDetail(item);
+  if (song) {
+    playerCore.playMusic = { ...item, ...song };
+    playTrack(playerCore.playMusic);
+  }
+};
+
+// ==================== 歌词模糊搜索 ====================
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const showSearchPanel = ref(false);
+const searchKeyword = ref('');
+const searchResults = ref<any[]>([]);
+const searchLoading = ref(false);
+const searchError = ref('');
+
+const toggleLyricSearch = () => {
+  showSearchPanel.value = !showSearchPanel.value;
+  if (!showSearchPanel.value) {
+    searchKeyword.value = '';
+    searchResults.value = [];
+  } else if (searchKeyword.value) {
+    doSearch(searchKeyword.value);
+  }
+};
+
+const onSearchInput = () => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  const keyword = searchKeyword.value.trim();
+  if (!keyword) {
+    searchResults.value = [];
+    return;
+  }
+  searchDebounceTimer = setTimeout(() => doSearch(keyword), 400);
+};
+
+const doSearch = async (keyword: string) => {
+  searchLoading.value = true;
+  searchError.value = '';
+  try {
+    const res = await searchSongByLyric(keyword);
+    searchResults.value = res?.data?.result?.songs || [];
+  } catch (e: any) {
+    searchError.value = '搜索失败: ' + (e?.message || '未知错误');
+    searchResults.value = [];
+  } finally {
+    searchLoading.value = false;
+  }
+};
+
+const playSearchResult = async (item: any) => {
+  showSearchPanel.value = false;
+  searchKeyword.value = '';
+  searchResults.value = [];
+  const { useSongDetail } = await import('@/hooks/useSongDetail');
+  const { default: playerCore } = await import('@/store/modules/playerCore');
+  const { playTrack } = await import('@/services/playbackController');
+  const song = await useSongDetail().getSongDetail(item);
+  if (song) {
+    playerCore.playMusic = { ...item, ...song };
+    playTrack(playerCore.playMusic);
+  }
+};
+
 // 添加对 playMusic.id 的监听，歌曲切换时滚动到顶部
 watch(
   () => playMusic.value.id,
@@ -1611,6 +1789,10 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
             &.intelligence-active {
               @apply text-green-500;
             }
+
+            &.active {
+              color: #60a5fa;
+            }
           }
 
           &:hover {
@@ -2096,5 +2278,184 @@ const getWordStyle = (lineIndex: number, _wordIndex: number, word: any) => {
   .square-style {
     @apply shadow-2xl shadow-black/50;
   }
+}
+
+/* 相似歌曲 & 歌词搜索面板 */
+.overlay-panel {
+  position: absolute;
+  bottom: 100px;
+  left: 0;
+  right: 0;
+  max-height: 50vh;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px 16px 0 0;
+  margin: 0 12px;
+  padding: 12px 16px;
+  overflow-y: auto;
+  z-index: 100;
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+
+    .panel-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .close-btn {
+      font-size: 20px;
+      color: rgba(255, 255, 255, 0.6);
+      cursor: pointer;
+      padding: 4px;
+
+      &:hover {
+        color: #fff;
+      }
+    }
+  }
+
+  .panel-loading {
+    display: flex;
+    justify-content: center;
+    padding: 24px;
+
+    .loading-icon {
+      font-size: 24px;
+      color: rgba(255, 255, 255, 0.6);
+      animation: spin 1s linear infinite;
+    }
+  }
+
+  .panel-error {
+    text-align: center;
+    padding: 16px;
+    color: #f87171;
+    font-size: 13px;
+  }
+
+  .panel-empty {
+    text-align: center;
+    padding: 16px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 13px;
+  }
+
+  .panel-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    .panel-list-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      &:active {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .item-index {
+        width: 22px;
+        text-align: center;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.4);
+        flex-shrink: 0;
+      }
+
+      .item-info {
+        flex: 1;
+        min-width: 0;
+
+        .item-name {
+          display: block;
+          font-size: 14px;
+          color: #fff;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .item-artist {
+          display: block;
+          font-size: 11px;
+          color: rgba(255, 255, 255, 0.5);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-top: 2px;
+        }
+      }
+
+      .item-play {
+        font-size: 20px;
+        color: rgba(255, 255, 255, 0.5);
+        flex-shrink: 0;
+
+        &:hover {
+          color: #60a5fa;
+        }
+      }
+    }
+  }
+
+  &.search-panel {
+    .search-input-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+
+      .search-icon {
+        font-size: 16px;
+        color: rgba(255, 255, 255, 0.4);
+        flex-shrink: 0;
+      }
+
+      .search-input {
+        flex: 1;
+        background: none;
+        border: none;
+        outline: none;
+        color: #fff;
+        font-size: 14px;
+
+        &::placeholder {
+          color: rgba(255, 255, 255, 0.3);
+        }
+      }
+    }
+  }
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.25s ease;
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>
