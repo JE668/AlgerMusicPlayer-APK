@@ -147,6 +147,14 @@ public class AudioFocusManager {
                 dispatchMediaButton(KeyEvent.KEYCODE_MEDIA_PAUSE);
             }
         });
+
+        // 关键修复：MediaSession 创建后立即激活，不要等 AudioFocus 获得后才激活。
+        // Android Auto / 车机在连接 MediaBrowserService 时需要 MediaSession 已激活，
+        // 否则车机无法发现该应用。应用启动时就应该激活，播放时自动获得 AudioFocus。
+        if (!sessionActive) {
+            mediaSession.setActive(true);
+            sessionActive = true;
+        }
     }
 
     private void dispatchMediaButton(int keyCode) {

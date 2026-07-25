@@ -614,6 +614,9 @@ export const initializePlayState = async (): Promise<void> => {
     }
   });
 
+  // 初始化原生层（激活 MediaSession，让车机可发现）
+  audioService.initNativeLayer();
+
   if (!playerCore.playMusic || Object.keys(playerCore.playMusic).length === 0) {
     console.log('[playbackController] 没有保存的播放状态，跳过初始化');
     // 设置播放速率

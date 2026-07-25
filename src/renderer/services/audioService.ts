@@ -225,6 +225,32 @@ class AudioService {
     }
   }
 
+  /**
+   * 初始化原生层（在应用启动时调用，让 MediaSession 立即激活并提供初始状态）
+   * 车机/Android Auto 需要 MediaSession 在连接时已激活并有元数据，否则不显示
+   */
+  public async initNativeLayer(): Promise<void> {
+    if (isElectron) return;
+    try {
+      // 确保 AudioFocus 插件已初始化（MediaSession 创建并激活）
+      // 设置初始播放状态（暂停）
+      await AudioFocus.updatePlaybackState({
+        playing: false,
+        position: 0,
+        duration: 0
+      });
+      // 设置占位元数据，让车机至少能看到应用名称
+      await AudioFocus.updateMetadata({
+        title: 'AlgerMusicPlayer',
+        artist: '',
+        album: '',
+        coverUrl: ''
+      });
+    } catch {
+      // 非 Capacitor 环境静默忽略
+    }
+  }
+
   private nativeUpdateMetadata(track: SongResult) {
     if (isElectron) return;
     try {
