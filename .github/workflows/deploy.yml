@@ -30,7 +30,18 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: 检查部署密钥是否已配置
+        id: check-secrets
+        run: |
+          if [ -n "${{ secrets.DEPLOY_KEY }}" ] && [ -n "${{ secrets.SERVER_HOST }}" ]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "⚠️ 部署密钥未配置，跳过部署步骤"
+          fi
+
       - name: Deploy to Server
+        if: steps.check-secrets.outputs.configured == 'true'
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -41,6 +52,7 @@ jobs:
           strip_components: 2
 
       - name: Execute Remote Commands
+        if: steps.check-secrets.outputs.configured == 'true'
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
