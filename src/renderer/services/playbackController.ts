@@ -341,6 +341,9 @@ export const playTrack = async (
         } as any;
       }
 
+      // 9.6 同步播放队列到原生层（车机/Android Auto 仪表盘显示"即将播放"）
+      audioService.syncNativeQueue();
+
       playbackRequestManager.completeRequest(requestId);
       console.log(`[playbackController] gen=${gen} 播放成功: ${music.name} (platform: ${resolvedPlatform})`);
 
@@ -592,6 +595,24 @@ export const setupUrlExpiredHandler = (): void => {
 export const initializePlayState = async (): Promise<void> => {
   const playerCore = await getPlayerCoreStore();
   const settingsStore = await getSettingsStore();
+
+  // 设置队列提供者，供 AudioService 同步播放列表到原生层（车机/Android Auto）
+  // 使用动态 import 避免循环依赖
+  audioService.setQueueProvider(() => {
+    try {
+      // 同步获取播放列表 — 此回调在播放流程中触发，Pinia store 已初始化
+      const { usePlaylistStore } = require('@/store/modules/playlist');
+      const playlistStore = usePlaylistStore();
+      return playlistStore.playList.map((song: any) => ({
+        id: String(song.id ?? ''),
+        name: song.name ?? '',
+        artist: song.ar?.map((a: any) => a.name).join(', ') ?? '',
+        picUrl: song.picUrl ?? ''
+      }));
+    } catch {
+      return [];
+    }
+  });
 
   if (!playerCore.playMusic || Object.keys(playerCore.playMusic).length === 0) {
     console.log('[playbackController] 没有保存的播放状态，跳过初始化');

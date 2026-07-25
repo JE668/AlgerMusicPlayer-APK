@@ -15,6 +15,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.support.v4.media.MediaBrowserCompat;
+import android.support.v4.media.MediaDescriptionCompat;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -228,7 +230,7 @@ public class AudioFocusManager {
             .setContentTitle(title)
             .setContentText(text)
             .setSubText(currentAlbum.isEmpty() ? null : currentAlbum)
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(appContext.getApplicationInfo().icon)
             .setContentIntent(contentIntent)
             .setOngoing(playing)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -449,6 +451,13 @@ public class AudioFocusManager {
 
         mediaSession.setPlaybackState(builder.build());
 
+        // 确保 MediaSession 在播放时始终激活，即使没有 AudioFocus
+        // 车机/Android Auto 依赖激活的 MediaSession 来发现和控制应用
+        if (playing && !sessionActive) {
+            mediaSession.setActive(true);
+            sessionActive = true;
+        }
+
         // WakeLock 管理
         if (playing) {
             acquireWakeLock();
@@ -461,6 +470,37 @@ public class AudioFocusManager {
             showNotification();
         } else if (!playing) {
             dismissNotification();
+        }
+    }
+
+    /**
+     * 更新播放队列（供 WebView 端调用）
+     * 设置 MediaSession 的队列，让 Android Auto / 车机仪表盘显示"即将播放"列表
+     */
+    public void updateQueue(List<MediaSessionCompat.QueueItem> queueItems) {
+        if (mediaSession == null) return;
+        mediaSession.setQueue(queueItems);
+
+        // 同步到 MediaBrowserService，让车机可以浏览播放列表
+        if (queueItems != null) {
+            List<MediaBrowserCompat.MediaItem> browserItems = new ArrayList<>();
+            String currentTitle = this.currentTitle;
+            for (int i = 0; i < queueItems.size(); i++) {
+                MediaSessionCompat.QueueItem qi = queueItems.get(i);
+                MediaDescriptionCompat desc = qi.getDescription();
+                // 第一首标记为"当前播放"
+                String title = (i == 0 ? "▶ " : "") + (desc.getTitle() != null ? desc.getTitle().toString() : "未知歌曲");
+                String subtitle = desc.getSubtitle() != null ? desc.getSubtitle().toString() : "";
+                MediaDescriptionCompat browseDesc = new MediaDescriptionCompat.Builder()
+                        .setMediaId(String.valueOf(qi.getQueueId()))
+                        .setTitle(title)
+                        .setSubtitle(subtitle)
+                        .setIconUri(desc.getIconUri())
+                        .build();
+                browserItems.add(new MediaBrowserCompat.MediaItem(
+                        browseDesc, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE));
+            }
+            MediaBrowserService.updateQueue(browserItems, currentTitle);
         }
     }
 

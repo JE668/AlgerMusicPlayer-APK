@@ -1,5 +1,12 @@
 import { registerPlugin } from '@capacitor/core';
 
+export interface QueueItem {
+  id: string;
+  title: string;
+  artist: string;
+  iconUri?: string;
+}
+
 export interface AudioFocusPlugin {
   requestFocus(): Promise<{ granted: boolean }>;
   requestFocusTransient(): Promise<{ granted: boolean }>;
@@ -15,6 +22,7 @@ export interface AudioFocusPlugin {
     position: number;
     duration: number;
   }): Promise<void>;
+  updateQueue(options: { items: QueueItem[] }): Promise<void>;
   isActive(): Promise<{ hasFocus: boolean; isPlaying: boolean }>;
   pause(): Promise<void>;
   addListener(

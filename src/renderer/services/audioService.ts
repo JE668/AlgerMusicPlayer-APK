@@ -25,6 +25,9 @@ class AudioService {
   // 否则新歌 canplay 会同时触发旧歌的回调，导致"过期回调 stop 掉正在播放的新歌"卡死。
   private pendingLoadCleanup: (() => void) | null = null;
 
+  // 队列提供者回调：由外部设置，供 AudioService 获取当前播放列表同步到原生层
+  private queueProvider: (() => Array<{ id: string; name: string; artist: string; picUrl: string }>) | null = null;
+
   private readonly frequencies = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
   private defaultEQSettings: { [key: string]: number } = {
@@ -327,6 +330,35 @@ class AudioService {
 
   clearAllListeners() {
     this.callbacks = {};
+  }
+
+  /**
+   * 设置队列提供者回调（由 playbackController 在初始化时调用）
+   */
+  public setQueueProvider(
+    provider: () => Array<{ id: string; name: string; artist: string; picUrl: string }>
+  ): void {
+    this.queueProvider = provider;
+  }
+
+  /**
+   * 同步当前播放队列到原生层（Android Auto / 车机仪表盘）
+   * 每次切歌时调用，让车机显示"即将播放"列表
+   */
+  public async syncNativeQueue(): Promise<void> {
+    try {
+      const items = this.queueProvider?.() ?? [];
+      if (items.length === 0) return;
+      const queueItems = items.map((item) => ({
+        id: String(item.id),
+        title: item.name || '未知歌曲',
+        artist: item.artist || '',
+        iconUri: item.picUrl || ''
+      }));
+      await AudioFocus.updateQueue({ items: queueItems });
+    } catch {
+      // 非 Capacitor 环境或无插件时静默失败
+    }
   }
 
   // ==================== EQ ====================

@@ -1,5 +1,7 @@
 package com.alger.audio;
 
+import android.support.v4.media.MediaDescriptionCompat;
+import android.support.v4.media.session.MediaSessionCompat;
 import android.view.KeyEvent;
 
 import com.getcapacitor.JSObject;
@@ -116,6 +118,38 @@ public class AudioFocusPlugin extends Plugin {
             focusManager.updatePlaybackState(playing,
                     (long) (position * 1000),
                     (long) (duration * 1000));
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void updateQueue(PluginCall call) {
+        JSObject queueData = call.getObject("queue", new JSObject());
+        if (focusManager != null) {
+            List<MediaSessionCompat.QueueItem> queueItems = new ArrayList<>();
+            try {
+                // queueData 格式：{ items: [{ id, title, artist, iconUri }] }
+                org.json.JSONArray items = queueData.getJSONArray("items");
+                for (int i = 0; i < items.length(); i++) {
+                    org.json.JSONObject item = items.getJSONObject(i);
+                    String title = item.optString("title", "");
+                    String artist = item.optString("artist", "");
+                    String iconUri = item.optString("iconUri", "");
+
+                    android.net.Uri iconUriObj = iconUri.isEmpty() ? null : android.net.Uri.parse(iconUri);
+                    MediaDescriptionCompat desc = new MediaDescriptionCompat.Builder()
+                            .setMediaId(item.optString("id", String.valueOf(i)))
+                            .setTitle(title)
+                            .setSubtitle(artist)
+                            .setIconUri(iconUriObj)
+                            .build();
+
+                    queueItems.add(new MediaSessionCompat.QueueItem(desc, i));
+                }
+            } catch (org.json.JSONException e) {
+                // 解析失败时使用空队列
+            }
+            focusManager.updateQueue(queueItems);
         }
         call.resolve();
     }
