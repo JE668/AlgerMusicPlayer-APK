@@ -10,6 +10,9 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @CapacitorPlugin(name = "AudioFocus")
 public class AudioFocusPlugin extends Plugin {
 

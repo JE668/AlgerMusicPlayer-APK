@@ -25,6 +25,9 @@ import android.view.KeyEvent;
 import androidx.core.app.NotificationCompat;
 import androidx.media.session.MediaButtonReceiver;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class AudioFocusManager {
 
     private static final String CHANNEL_ID = "alger_playback";
